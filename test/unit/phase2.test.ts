@@ -104,7 +104,14 @@ describe('US-16 escalation rules', () => {
 
   it('writes escalation messages that say how long each alert has waited', () => {
     const items = [{ flag: flag({ companyName: 'Lekki Foods' }), businessDaysWaiting: 3 }];
-    expect(escalationSubject('lead', 'ada@x.com', items)).toBe('Escalation: 1 alert for ada@x.com not acknowledged');
-    expect(escalationText('director', null, items, (id) => `https://a/ack/${id}`)).toContain('Lekki Foods: ARR does not match seats × price (waiting 3 business days)');
+    const url = (id: number) => `https://a/ack/${id}`;
+    expect(escalationSubject('lead', 'ada@x.com', items)).toBe('Escalation: 1 alert for ada@x.com needs follow-up');
+    expect(escalationText('director', 'ada@x.com', items, url)).toContain('Open 3 business days, not acknowledged.');
+    expect(escalationText('director', 'ada@x.com', items, url)).toContain('were escalated to their team lead');
+    // Straight to directors: never claim a team lead was involved.
+    expect(escalationText('director_no_lead', 'ada@x.com', items, url)).not.toContain('were escalated to their team lead');
+    expect(escalationText('director_no_csm', null, items, url)).toContain('Please assign a CSM to these accounts in HubSpot.');
+    const drought = [{ flag: flag({ type: 'ENGAGEMENT_DROUGHT', acknowledgedAt: '2026-11-04T09:00:00Z' }), businessDaysWaiting: 3 }];
+    expect(escalationText('lead', 'ada@x.com', drought, url)).toContain('acknowledged, but no call, meeting or email logged yet');
   });
 });

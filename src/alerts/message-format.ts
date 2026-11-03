@@ -61,7 +61,7 @@ export function emailSubject(flags: StoredFlag[]): string {
 export function escalationNote(flags: StoredFlag[], escalate: { severities: string[]; businessDays: number } | null): string | null {
   if (!escalate || !flags.some((f) => escalate.severities.includes(f.severity))) return null;
   const levels = escalate.severities.join(' and ');
-  return `If ${levels} alerts are not acknowledged within ${escalate.businessDays} business days, they go to your team lead.`;
+  return `If ${levels} alerts are not acknowledged within ${escalate.businessDays} business days, they go to your team lead, or to the CS Directors if you have none on record.`;
 }
 
 export function emailBody(
@@ -127,52 +127,100 @@ export function taskBody(flag: StoredFlag, ackUrl: AckUrlFn): string {
 
 export type EscalationLevel = 'lead' | 'director';
 
+/**
+ * Why an escalation reaches its recipient. Directors hear about an alert either
+ * after the team lead had it (`director`), or directly because the CSM has no
+ * team lead on record (`director_no_lead`) or the account has no CSM (`director_no_csm`).
+ */
+export type EscalationRoute = 'lead' | 'director' | 'director_no_lead' | 'director_no_csm';
+
+export function levelOf(route: EscalationRoute): EscalationLevel {
+  return route === 'lead' ? 'lead' : 'director';
+}
+
 export interface EscalationItem {
   flag: StoredFlag;
   /** Business days since the CSM was notified (lead) or since the lead was (director). */
   businessDaysWaiting: number;
 }
 
-/** US-16: what a team lead or director receives about one CSM's unhandled alerts. */
-export function escalationSubject(level: EscalationLevel, csm: string | null, items: EscalationItem[]): string {
-  const who = csm ?? 'unassigned accounts';
-  const n = items.length;
-  return level === 'lead'
-    ? `Escalation: ${n} alert${n === 1 ? '' : 's'} for ${who} not acknowledged`
-    : `Director escalation: ${n} alert${n === 1 ? '' : 's'} for ${who} still unhandled`;
+/** Why the item is still open: an acknowledged no-contact alert still needs a logged contact. */
+function itemState(f: StoredFlag): string {
+  return f.acknowledgedAt && f.type === 'ENGAGEMENT_DROUGHT'
+    ? 'acknowledged, but no call, meeting or email logged yet'
+    : 'not acknowledged';
 }
 
-export function escalationText(level: EscalationLevel, csm: string | null, items: EscalationItem[], ackUrl: AckUrlFn): string {
-  const who = csm ?? 'accounts with no CSM in HubSpot';
-  const intro =
-    level === 'lead'
-      ? `These alerts for ${who} have not been acknowledged.`
-      : `These alerts for ${who} were escalated to their team lead and are still unhandled.`;
+/** US-16: what a team lead or director receives about one CSM's unhandled alerts. */
+export function escalationSubject(route: EscalationRoute, csm: string | null, items: EscalationItem[]): string {
+  const who = csm ?? 'accounts with no CSM';
+  const n = `${items.length} alert${items.length === 1 ? '' : 's'}`;
+  switch (route) {
+    case 'lead':
+      return `Escalation: ${n} for ${who} ${items.length === 1 ? 'needs' : 'need'} follow-up`;
+    case 'director':
+      return `Director escalation: ${n} for ${who} still unhandled after team lead`;
+    case 'director_no_lead':
+      return `Director escalation: ${n} for ${who} (no team lead on record)`;
+    case 'director_no_csm':
+      return `Director escalation: ${n} on ${who}`;
+  }
+}
+
+function intro(route: EscalationRoute, csm: string | null): string {
+  switch (route) {
+    case 'lead':
+      return `These alerts for ${csm} are still open after the CSM was notified.`;
+    case 'director':
+      return `These alerts for ${csm} were escalated to their team lead and are still unhandled.`;
+    case 'director_no_lead':
+      return `These alerts for ${csm} are still open. ${csm} has no team lead on record, so they come straight to you.`;
+    case 'director_no_csm':
+      return 'These alerts are on accounts with no CSM assigned in HubSpot, so they come straight to you.';
+  }
+}
+
+function outro(route: EscalationRoute): string {
+  switch (route) {
+    case 'lead':
+      return 'Please follow up with the CSM. Anything still unhandled goes to the CS Directors next.';
+    case 'director':
+      return 'Please follow up with the team lead and CSM.';
+    case 'director_no_lead':
+      return 'Please follow up with the CSM, and set their team lead in the Audit Assistant (Team leads).';
+    case 'director_no_csm':
+      return 'Please assign a CSM to these accounts in HubSpot.';
+  }
+}
+
+export function escalationText(route: EscalationRoute, csm: string | null, items: EscalationItem[], ackUrl: AckUrlFn): string {
   return [
-    intro,
+    intro(route, csm),
     '',
     ...items.flatMap(({ flag: f, businessDaysWaiting }) => [
-      `- [${f.severity.toUpperCase()}] ${f.companyName}: ${FLAG_TITLES[f.type]} (waiting ${businessDaysWaiting} business days)`,
+      `- [${f.severity.toUpperCase()}] ${f.companyName}: ${FLAG_TITLES[f.type]}`,
       `  ${f.summary}`,
-      `  Acknowledge: ${ackUrl(f.id)}`,
+      `  Open ${businessDaysWaiting} business days, ${itemState(f)}. Acknowledge: ${ackUrl(f.id)}`,
       '',
     ]),
-    level === 'lead'
-      ? 'Please follow up with the CSM. Anything still unhandled goes to the CS Directors next.'
-      : 'Please follow up with the team lead and CSM.',
+    outro(route),
   ].join('\n');
 }
 
-export function escalationChat(level: EscalationLevel, csm: string | null, items: EscalationItem[], ackUrl: AckUrlFn): string {
+export function escalationChat(route: EscalationRoute, csm: string | null, items: EscalationItem[], ackUrl: AckUrlFn): string {
+  const n = `${items.length} alert${items.length === 1 ? '' : 's'}`;
+  const who = csm ?? 'accounts with no CSM';
   const head =
-    level === 'lead'
-      ? `⏫ *Escalated to team lead: ${items.length} unacknowledged alert${items.length === 1 ? '' : 's'} for ${csm ?? 'unassigned accounts'}*`
-      : `⏫⏫ *Escalated to CS Directors: ${items.length} unhandled alert${items.length === 1 ? '' : 's'} for ${csm ?? 'unassigned accounts'}*`;
+    route === 'lead'
+      ? `⏫ *Escalated to team lead: ${n} for ${who}*`
+      : route === 'director'
+        ? `⏫⏫ *Escalated to CS Directors: ${n} for ${who}, still unhandled after team lead*`
+        : `⏫⏫ *Escalated to CS Directors: ${n} for ${who}${route === 'director_no_lead' ? ' (no team lead on record)' : ''}*`;
   return [
     head,
     ...items.map(
       ({ flag: f, businessDaysWaiting }) =>
-        `*${chatSafe(f.companyName)}*: ${FLAG_TITLES[f.type]} · ${businessDaysWaiting} business days\n${chatSafe(f.summary)}\n<${ackUrl(f.id)}|Acknowledge>`,
+        `*${chatSafe(f.companyName)}*: ${FLAG_TITLES[f.type]} · open ${businessDaysWaiting} business days, ${itemState(f)}\n${chatSafe(f.summary)}\n<${ackUrl(f.id)}|Acknowledge>`,
     ),
   ].join('\n\n');
 }

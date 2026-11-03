@@ -11,8 +11,10 @@ import {
   escalationChat,
   escalationSubject,
   escalationText,
+  levelOf,
   type EscalationItem,
   type EscalationLevel,
+  type EscalationRoute,
 } from './message-format.js';
 
 export interface EscalationDecision extends EscalationItem {
@@ -87,13 +89,18 @@ export class EscalationService {
     const directors = await this.directors();
 
     // A CSM with no team lead on record goes straight to the directors.
-    const groups = new Map<string, { level: EscalationLevel; csm: string | null; to: string[]; items: EscalationItem[] }>();
+    const groups = new Map<
+      string,
+      { route: EscalationRoute; level: EscalationLevel; csm: string | null; to: string[]; items: EscalationItem[] }
+    >();
     for (const d of decisions) {
       const lead = d.flag.csmEmail ? leads.get(d.flag.csmEmail) : undefined;
-      const level: EscalationLevel = d.level === 'lead' && lead ? 'lead' : 'director';
-      const to = level === 'lead' ? [lead!] : directors;
-      const key = `${level}|${d.flag.csmEmail ?? ''}`;
-      const g = groups.get(key) ?? { level, csm: d.flag.csmEmail, to, items: [] };
+      const route: EscalationRoute =
+        d.level === 'director' ? 'director' : !d.flag.csmEmail ? 'director_no_csm' : lead ? 'lead' : 'director_no_lead';
+      const level = levelOf(route);
+      const to = route === 'lead' ? [lead!] : directors;
+      const key = `${route}|${d.flag.csmEmail ?? ''}`;
+      const g = groups.get(key) ?? { route, level, csm: d.flag.csmEmail, to, items: [] };
       g.items.push({ flag: d.flag, businessDaysWaiting: d.businessDaysWaiting });
       groups.set(key, g);
     }
@@ -112,9 +119,9 @@ export class EscalationService {
           (await this.deliver(g.items, 'email', g.to.join(','), kind, () =>
             this.senders.email.send({
               to: g.to,
-              subject: escalationSubject(g.level, g.csm, g.items),
-              text: escalationText(g.level, g.csm, g.items, ack),
-              html: `<pre style="font:14px/1.5 Arial,sans-serif;white-space:pre-wrap">${escapeHtml(escalationText(g.level, g.csm, g.items, ack))}</pre>`,
+              subject: escalationSubject(g.route, g.csm, g.items),
+              text: escalationText(g.route, g.csm, g.items, ack),
+              html: `<pre style="font:14px/1.5 Arial,sans-serif;white-space:pre-wrap">${escapeHtml(escalationText(g.route, g.csm, g.items, ack))}</pre>`,
             }),
           )) || sentAny;
       }
@@ -122,7 +129,7 @@ export class EscalationService {
         const webhook = this.cfg.GOOGLE_CHAT_DEFAULT_WEBHOOK;
         sentAny =
           (await this.deliver(g.items, 'google_chat', CHAT_SPACE, kind, () =>
-            this.senders.chat.send(webhook, escalationChat(g.level, g.csm, g.items, ack)),
+            this.senders.chat.send(webhook, escalationChat(g.route, g.csm, g.items, ack)),
           )) || sentAny;
       }
 
@@ -139,7 +146,7 @@ export class EscalationService {
         );
         await this.db.query(
           `INSERT INTO action_log (actor, action, object_type, object_id, details) VALUES ('scheduler', 'flag.escalate', 'audit_flag', $1, $2)`,
-          [String(flag.id), JSON.stringify({ level: g.level, to: g.to })],
+          [String(flag.id), JSON.stringify({ level: g.level, route: g.route, to: g.to })],
         );
       }
       if (g.level === 'lead') result.toLeads += g.items.length;

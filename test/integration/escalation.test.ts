@@ -55,8 +55,9 @@ describe('escalation against Postgres', () => {
 
     const toLead = outbox.emails.filter((e) => e.to.includes('lead@example.com'));
     expect(toLead).toHaveLength(1);
-    expect(toLead[0]!.subject).toBe('Escalation: 1 alert for tunde.bello@example.com not acknowledged');
-    expect(toLead[0]!.text).toContain('Ibadan Clinics: No contact within the limit (waiting 3 business days)');
+    expect(toLead[0]!.subject).toBe('Escalation: 1 alert for tunde.bello@example.com needs follow-up');
+    expect(toLead[0]!.text).toContain('Ibadan Clinics: No contact within the limit');
+    expect(toLead[0]!.text).toContain('Open 3 business days, acknowledged, but no call, meeting or email logged yet.');
     expect(toLead[0]!.text).not.toContain('Kano'); // acknowledged, so handled
 
     const toDirectors = outbox.emails.filter((e) => e.to.includes('director@example.com'));
@@ -65,9 +66,13 @@ describe('escalation against Postgres', () => {
       ['director2@example.com', 'director@example.com'],
     ]);
     expect(toDirectors.map((e) => e.subject).sort()).toEqual([
-      'Director escalation: 2 alerts for ngozi.okafor@example.com still unhandled',
-      'Director escalation: 2 alerts for unassigned accounts still unhandled',
+      'Director escalation: 2 alerts for ngozi.okafor@example.com (no team lead on record)',
+      'Director escalation: 2 alerts on accounts with no CSM',
     ]);
+    const noLead = toDirectors.find((e) => e.subject.includes('no team lead'))!;
+    expect(noLead.text).toContain('has no team lead on record, so they come straight to you');
+    expect(noLead.text).not.toContain('were escalated to their team lead');
+    expect(noLead.text).toContain('Open 3 business days, not acknowledged.');
     expect(outbox.chats.every((c) => c.text.startsWith('⏫'))).toBe(true);
 
     // Low and medium flags never escalate.
@@ -91,7 +96,7 @@ describe('escalation against Postgres', () => {
     expect(((await jobs.run('escalate', '2026-11-09')) as any).escalate.toDirectors).toBe(0); // Mon: 1 day
     const tuesday = (await jobs.run('escalate', '2026-11-10')) as any; // Tue: 2 days
     expect(tuesday.escalate).toMatchObject({ toLeads: 0, toDirectors: 2 });
-    expect(outbox.emails[0]!.subject).toBe('Director escalation: 2 alerts for tunde.bello@example.com still unhandled');
+    expect(outbox.emails[0]!.subject).toBe('Director escalation: 2 alerts for tunde.bello@example.com still unhandled after team lead');
     expect(outbox.emails[0]!.text).toContain('were escalated to their team lead and are still unhandled');
   });
 

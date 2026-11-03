@@ -78,7 +78,7 @@ describe('message formatting', () => {
   it('only promises escalation for flags that actually escalate', () => {
     const rules = { severities: ['urgent', 'high'], businessDays: 3 };
     const note = escalationNote([flag({ severity: 'high' })], rules);
-    expect(note).toBe('If urgent and high alerts are not acknowledged within 3 business days, they go to your team lead.');
+    expect(note).toBe('If urgent and high alerts are not acknowledged within 3 business days, they go to your team lead, or to the CS Directors if you have none on record.');
     expect(emailBody('a@x.com', [flag({})], ack, note).text).toContain(note!);
     expect(escalationNote([flag({ severity: 'low' })], rules)).toBeNull();
     expect(emailBody('a@x.com', [flag({ severity: 'low' })], ack, null).text).not.toContain('team lead');
