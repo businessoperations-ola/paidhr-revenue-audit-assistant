@@ -1,0 +1,21 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "env": { "value": "dev" },
+    "imageTag": { "value": "REPLACE_WITH_GIT_SHA" },
+    "googleWorkspaceDomain": { "value": "paidhr.com" },
+    "googleOAuthClientId": { "value": "REPLACE.apps.googleusercontent.com" },
+    "mailFrom": { "value": "Audit Assistant <audit-assistant@paidhr.com>" },
+    "fallbackAlertEmails": { "value": "cs-leads@paidhr.com" },
+    "postgresAdminPassword": {
+      "reference": {
+        "keyVault": { "id": "/subscriptions/<sub>/resourceGroups/<bootstrap-rg>/providers/Microsoft.KeyVault/vaults/<bootstrap-kv>" },
+        "secretName": "postgres-admin-password"
+      }
+    },
+    "alertsLive": { "value": false },
+    "aiRationaleEnabled": { "value": false },
+    "foundryResource": { "value": "" }
+  }
+}
