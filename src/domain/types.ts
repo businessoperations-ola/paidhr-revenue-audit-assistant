@@ -18,6 +18,8 @@ export interface HubSpotCompany {
   arrKobo: Kobo | null;
   pricePerSeatMonthlyKobo: Kobo | null;
   healthStatus: string | null;
+  /** Last logged call, meeting or email (HubSpot "Last contacted"), as a WAT date. */
+  lastActivityDate: IsoDate | null;
 }
 
 export type PayFrequency = 'MONTHLY' | 'SEMI_MONTHLY' | 'BIWEEKLY' | 'WEEKLY';
@@ -47,7 +49,8 @@ export type FlagType =
   | 'BROKEN_LINK' // US-03
   | 'SEAT_OVERAGE' // US-05
   | 'MISSING_FIELDS' // US-17
-  | 'LATE_PAYROLL'; // US-24
+  | 'LATE_PAYROLL' // US-24
+  | 'ENGAGEMENT_DROUGHT'; // US-14
 
 export type Severity = 'urgent' | 'high' | 'medium' | 'low';
 

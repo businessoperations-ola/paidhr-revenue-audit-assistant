@@ -1,16 +1,17 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { AlertDispatcher } from '../alerts/alert-dispatcher.service.js';
+import { EscalationService } from '../alerts/escalation.service.js';
 import { AuditService } from '../audits/audit.service.js';
 import type { IsoDate } from '../common/calendar.js';
 import { Database } from '../db/database.js';
 import { IngestionService } from '../ingestion/ingestion.service.js';
 
-export const JOB_NAMES = ['ingest', 'audit', 'dispatch', 'daily'] as const;
+export const JOB_NAMES = ['ingest', 'audit', 'dispatch', 'escalate', 'daily'] as const;
 export type JobName = (typeof JOB_NAMES)[number];
 
 /**
  * The scheduled work. `daily` is what the 04:00 WAT job runs: snapshot, audit, then alert.
- * `dispatch` on its own retries failed deliveries.
+ * `dispatch` on its own retries failed deliveries. `escalate` runs at 08:00 WAT on weekdays (US-16).
  */
 @Injectable()
 export class JobRunner {
@@ -19,6 +20,7 @@ export class JobRunner {
     @Inject(IngestionService) private readonly ingestion: IngestionService,
     @Inject(AuditService) private readonly audits: AuditService,
     @Inject(AlertDispatcher) private readonly dispatcher: AlertDispatcher,
+    @Inject(EscalationService) private readonly escalation: EscalationService,
   ) {}
 
   async run(name: JobName, date: IsoDate, actor = 'scheduler') {
@@ -33,6 +35,8 @@ export class JobRunner {
         return { audit: await this.audits.run(date) };
       case 'dispatch':
         return { dispatch: await this.dispatcher.dispatch() };
+      case 'escalate':
+        return { escalate: await this.escalation.run(date) };
       case 'daily': {
         const ingest = await this.ingestion.run(date);
         const audit = await this.audits.run(date);

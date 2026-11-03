@@ -8,6 +8,12 @@ const RulesSchema = z.object({
   payroll_grace_business_days: z.coerce.number().int().min(0).max(30),
   mandatory_fields: z.array(z.string()),
   seat_history_days: z.coerce.number().int().min(2).max(800),
+  inactivity_days_by_health: z
+    .record(z.string().min(1), z.coerce.number().int().min(1).max(365))
+    .refine((r) => 'default' in r, { message: 'Must include a "default" limit' }),
+  escalation_business_days: z.coerce.number().int().min(1).max(30),
+  director_escalation_business_days: z.coerce.number().int().min(1).max(30),
+  escalate_severities: z.array(z.enum(['urgent', 'high', 'medium', 'low'])),
 });
 
 export type AuditRules = z.infer<typeof RulesSchema>;

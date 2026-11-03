@@ -100,7 +100,11 @@ export class AckController {
         [actor, String(id)],
       );
     }
-    return page('Acknowledged', `<h2>Thanks, acknowledged</h2><p>${escapeHtml(flag.companyName)} will not escalate. The flag closes automatically once the next audit no longer finds the problem.</p>`);
+    const next =
+      flag.type === 'ENGAGEMENT_DROUGHT'
+        ? 'This alert closes once a call, meeting or email with them is logged in HubSpot. Until then it can still escalate to your team lead.'
+        : 'It will not escalate. The flag closes automatically once the next audit no longer finds the problem.';
+    return page('Acknowledged', `<h2>Thanks, acknowledged</h2><p><strong>${escapeHtml(flag.companyName)}</strong>. ${next}</p>`);
   }
 }
 
@@ -120,9 +124,16 @@ export class FlagsController {
     @Query('type') type?: string,
     @Query('csm') csm?: string,
     @Query('limit') limit?: string,
+    @Query('escalated') escalated?: string,
   ) {
     const csmEmail = req.user.role === 'csm' ? req.user.email : csm;
-    return this.flags.list({ status, type, csmEmail, limit: limit ? Number(limit) : undefined });
+    return this.flags.list({
+      status: status === 'all' ? undefined : status,
+      type,
+      csmEmail,
+      escalated: escalated === 'true',
+      limit: limit ? Number(limit) : undefined,
+    });
   }
 
   @Get(':id')
@@ -131,7 +142,7 @@ export class FlagsController {
     const flag = await this.flags.findById(id);
     if (!flag || (req.user.role === 'csm' && flag.csmEmail !== req.user.email)) throw new NotFoundException();
     const { rows: alerts } = await this.db.query(
-      'SELECT channel, recipient, status, attempts, error, sent_at FROM alert WHERE flag_id = $1 ORDER BY id',
+      'SELECT channel, recipient, kind, status, attempts, error, sent_at FROM alert WHERE flag_id = $1 ORDER BY id',
       [id],
     );
     return { ...flag, alerts };

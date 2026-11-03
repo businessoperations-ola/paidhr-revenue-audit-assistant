@@ -12,6 +12,8 @@ const USAGE = `Usage: node dist/cli.js <migrate|${JOB_NAMES.join('|')}> [--date 
   ingest    snapshot HubSpot + Control Panel for the date (default: today in WAT)
   audit     run phase-1 audits on that snapshot
   dispatch  send undelivered alerts (also retries failures)
+  escalate  send unacknowledged alerts to team leads, then directors (US-16)
+  team      set a CSM's team lead: team <csm-email> <lead-email>
   daily     ingest, audit, dispatch (the 04:00 WAT scheduled job)
   grant     grant API access: grant <email> <role>`;
 
@@ -46,6 +48,17 @@ async function main() {
         [email, JSON.stringify({ role })],
       );
       console.log(`${email} → ${role}`);
+      return;
+    }
+    if (command === 'team') {
+      const [csm, lead] = rest;
+      if (!csm || !lead) throw new Error('team <csm-email> <lead-email>');
+      await db.query(
+        `INSERT INTO csm_team (csm_email, team_lead_email, updated_by) VALUES (lower($1), lower($2), 'cli')
+         ON CONFLICT (csm_email) DO UPDATE SET team_lead_email = EXCLUDED.team_lead_email, updated_at = now(), updated_by = 'cli'`,
+        [csm, lead],
+      );
+      console.log(`${csm} → team lead ${lead}`);
       return;
     }
     if (!JOB_NAMES.includes(command as JobName)) {

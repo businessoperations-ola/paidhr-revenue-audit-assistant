@@ -1,8 +1,8 @@
-# Revenue & Data Audit Assistant: phase 1
+# Revenue & Data Audit Assistant
 
 Every morning at 04:00 WAT this service snapshots HubSpot and the Control Panel, checks billing and payroll, and alerts the right CSM in Google Chat, Gmail and HubSpot before the CX team starts work.
 
-Phase 1 covers the billing audits and late-payroll alerts:
+Phases 1 and 2 cover the billing audits, late-payroll alerts, engagement checks and escalation:
 
 | Story | What it checks | Flag type | Severity |
 | --- | --- | --- | --- |
@@ -14,6 +14,8 @@ Phase 1 covers the billing audits and late-payroll alerts:
 | US-15 | Every new flag goes to the CSM; a HubSpot task is created per flag | – | – |
 | US-17 | Empty mandatory HubSpot fields, listed per company | `MISSING_FIELDS` | low |
 | US-24 | Payroll not run within the grace buffer (default 2 business days) after its expected date | `LATE_PAYROLL` | urgent |
+| US-13 / 14 | No call, meeting or email logged within the limit for the customer's health status (At Risk 7 days, Neutral 14, Healthy 30) | `ENGAGEMENT_DROUGHT` | high / medium / low |
+| US-16 | Urgent and high alerts not acknowledged within 3 business days go to the CSM's team lead, then 2 business days later to every CS Director | escalation | – |
 
 ## How it works
 
@@ -23,8 +25,10 @@ Container Apps Job (04:00 WAT)
        1. ingest    HubSpot companies + Control Panel accounts → daily snapshot tables
        2. audit     run every rule on today's snapshot → audit_flag (one open flag per problem)
        3. dispatch  new flags → Google Chat, Gmail, HubSpot tasks (recorded in `alert`)
+Container Apps Job (08:00 WAT, Mon–Fri)
+  └─ node dist/cli.js escalate   unacknowledged urgent/high alerts → team lead → CS Directors
 API (Container App, Google sign-in)
-  └─ flags, acknowledgements, reports, rules, manual job runs
+  └─ admin web app at /, plus flags, acknowledgements, reports, rules, team leads, manual job runs
 ```
 
 - **The numbers are computed in code, never by AI.** Every audit is a pure function in `src/audits/`, unit-tested. Money is integer kobo (`bigint`), so the ₦0.01 check is exact.
@@ -32,6 +36,7 @@ API (Container App, Google sign-in)
 - **Alerts are sent once.** Urgent flags go out on their own. Everything else is grouped into one chat message and one email per CSM per run. Failed sends are retried by the hourly `dispatch` job, up to 3 attempts per channel.
 - **Acknowledge links are signed.** The link in Chat or email opens a confirmation page. Only pressing the button records the acknowledgement, because email security scanners open links automatically.
 - **Safety stops.** The audit refuses to run without today's snapshot, and refuses an empty HubSpot pull. An outage therefore can't raise false late-payroll alerts or close every open flag.
+- **Escalation counts working days.** The clock starts when the CSM was first alerted. Acknowledging stops it, except for engagement droughts: those count as handled only when a call, meeting or email is logged in HubSpot, which also closes the flag. A CSM with no team lead on record escalates straight to the directors.
 - **Claude is optional.** With `AI_RATIONALE_ENABLED=true`, Claude Opus 5.5 (via Microsoft Foundry) adds a short "why" and "next step" to billing and payroll alerts. A failure never blocks an alert.
 
 ## Run it locally
@@ -62,9 +67,22 @@ TEST_DATABASE_URL=postgresql://…/audit_test TEST_CP_DATABASE_URL=postgresql://
 | `node dist/cli.js migrate` | Apply database migrations (also runs automatically on start). |
 | `node dist/cli.js daily [--date YYYY-MM-DD]` | Ingest, audit, then dispatch. This is the scheduled job. |
 | `node dist/cli.js ingest\|audit\|dispatch [--date …]` | Run one step on its own. |
-| `node dist/cli.js grant <email> <role>` | Give a Google Workspace user access to the API. |
+| `node dist/cli.js escalate [--date …]` | Send unacknowledged alerts to team leads and directors (the 08:00 WAT job). |
+| `node dist/cli.js grant <email> <role>` | Give a Google Workspace user access to the API and web app. |
+| `node dist/cli.js team <csm-email> <lead-email>` | Set a CSM's team lead (also editable in the web app). |
 
 Roles: `super_admin`, `cs_director`, `cs_team_lead`, `csm`, `implementation_manager`, `support_specialist`, `viewer`.
+
+## Admin web app
+
+Open the API's address in a browser and sign in with your company Google account. It has four screens:
+
+- **Alerts:** every flag, most severe first, filterable by status, type and "escalated only". Select one to see where it was sent and acknowledge it. CSMs only see their own accounts.
+- **Rules:** inactivity limits per health status, escalation timing and which alert levels escalate, plus the phase 1 thresholds. Super admins can edit; everyone else can read. Every change is logged with who made it.
+- **Team leads:** which team lead each CSM escalates to. Directors can edit.
+- **Reconciliation:** the latest HubSpot vs Control Panel counts and the sub-account tree.
+
+The app is served by the API itself, so it needs no separate hosting. Add the API's address as an authorised JavaScript origin on the Google OAuth client.
 
 ## API
 
@@ -72,15 +90,18 @@ Every route needs `Authorization: Bearer <Google ID token>` for a user granted a
 
 | Route | Who | |
 | --- | --- | --- |
-| `GET /flags?status=open&type=&csm=` | CSM (own accounts only), lead, director, viewer | Open flags, most severe first |
+| `GET /` | anyone | The admin web app (sign-in happens in the browser) |
+| `GET /me` | any signed-in user | Who you are and your role |
+| `GET /flags?status=open\|resolved\|all&type=&csm=&escalated=true` | CSM (own accounts only), lead, director, viewer | Flags, most severe first |
 | `GET /flags/:id` | same | Flag with its delivery history |
 | `POST /flags/:id/acknowledge` | CSM, lead, director | |
 | `GET /reports/latest` | lead, director, viewer | US-03 reconciliation counts + US-04 sub-account counts |
 | `GET /rules`, `PUT /rules/:key` | read: managers; write: super admin | Thresholds, validated and logged |
-| `POST /jobs/:name?date=` | super admin | Run `ingest`, `audit`, `dispatch` or `daily` now |
+| `GET /team`, `PUT /team/:csm`, `DELETE /team/:csm` | read: managers; write: director | Team lead per CSM, logged |
+| `POST /jobs/:name?date=` | super admin | Run `ingest`, `audit`, `dispatch`, `escalate` or `daily` now |
 | `GET/POST /ack/:id?sig=` | anyone holding the signed link | One-click acknowledge from an alert |
 
-Rules admins can change without a deploy: `arr_tolerance_kobo` (1), `payroll_grace_business_days` (2), `mandatory_fields`, `seat_history_days` (400). Public holidays live in the `public_holiday` table. Fixed-date holidays and Easter for 2026–2027 are seeded. **Add the Eid holidays (and any Monday holiday declared when a holiday falls on a weekend) once the government announces them.**
+Rules admins can change without a deploy: `arr_tolerance_kobo` (1), `payroll_grace_business_days` (2), `mandatory_fields`, `seat_history_days` (400), `inactivity_days_by_health` (At Risk 7, Neutral 14, Healthy 30, default 14), `escalation_business_days` (3), `director_escalation_business_days` (2) and `escalate_severities` (urgent, high). Public holidays live in the `public_holiday` table. Fixed-date holidays and Easter for 2026–2027 are seeded. **Add the Eid holidays (and any Monday holiday declared when a holiday falls on a weekend) once the government announces them.**
 
 ## Connecting the real systems
 
@@ -88,7 +109,8 @@ Rules admins can change without a deploy: `arr_tolerance_kobo` (1), `payroll_gra
 
 1. Create a **private app** that can read companies and owners and create tasks. Put its token in Key Vault as `hubspot-token`.
 2. Make sure each customer company has these properties. The internal names are configurable with `HS_PROP_*`:
-   `control_panel_id`, `csm_email` (or set the company owner), `csm_name`, `industry`, `contract_end_date`, `seat_tier`, `paid_seats`, `arr_ngn`, `price_per_seat_monthly_ngn`.
+   `control_panel_id`, `csm_email` (or set the company owner), `csm_name`, `industry`, `contract_end_date`, `seat_tier`, `paid_seats`, `arr_ngn`, `price_per_seat_monthly_ngn`, `health_status` (values `At Risk`, `Neutral`, `Healthy`).
+   Engagement uses HubSpot's built-in **Last contacted** (`notes_last_contacted`), set when a call, meeting or email is logged. Change it with `HS_PROP_LAST_ACTIVITY` if your team tracks contact differently.
 3. Only companies with lifecycle stage `customer` are audited (`HS_CUSTOMER_LIFECYCLE_STAGE`).
 
 ### Control Panel
@@ -103,7 +125,7 @@ The Control Panel team installs `docs/control-panel-views.sql` on the read repli
 
 ## Deploying to Azure
 
-`infra/main.bicep` creates a private VNet, PostgreSQL Flexible Server (no public access), Key Vault, a container registry, a Container Apps environment, the API, and two scheduled jobs: `daily` at 03:00 UTC (04:00 WAT), and `dispatch` hourly 08:15–18:15 WAT on weekdays.
+`infra/main.bicep` creates a private VNet, PostgreSQL Flexible Server (no public access), Key Vault, a container registry, a Container Apps environment, the API (which also serves the admin web app), and three scheduled jobs: `daily` at 03:00 UTC (04:00 WAT), `dispatch` hourly 08:15–18:15 WAT on weekdays, and `escalate` at 07:00 UTC (08:00 WAT) on weekdays.
 
 > The Bicep template has not been compiled in this environment. The `infra` job in `.github/workflows/ci.yml` runs `az bicep build` on every push. Fix anything it reports before the first deploy.
 
@@ -119,8 +141,10 @@ The Control Panel team installs `docs/control-panel-views.sql` on the read repli
 - [ ] Every active customer has a Control Panel ID in HubSpot. The first `UNLINKED_*` report shows which ones are missing.
 - [ ] Control Panel view installed and checked against 5 known accounts.
 - [ ] One week in shadow mode (`alertsLive=false`). Review the flags with CX Ops, then tune the rules.
+- [ ] Grant every CS Director the `cs_director` role, and set each CSM's team lead (web app → Team leads).
+- [ ] Check HubSpot health statuses are exactly `At Risk`, `Neutral` or `Healthy` (other values use the default limit).
 - [ ] Turn on alerts per channel (`alertsLive=true`). Optionally turn on `aiRationaleEnabled`.
 
-## Not in phase 1
+## Not built yet
 
-Escalation after 3 business days (US-16), configurable inactivity rules (US-13, 14), the admin web UI, reports and digests (phase 3), and CX AI tools and broadcasts (phase 4). The `acknowledged_at` timestamp on each flag is already recorded for the phase-2 escalation timer.
+Phase 3: scheduled role-based reports and digests (US-25), churn, renewal, adoption and ARR analytics (US-06–12, 18, 19). Phase 4: Claude-powered CX tools (US-26–28) and admin broadcasts (US-20–23).

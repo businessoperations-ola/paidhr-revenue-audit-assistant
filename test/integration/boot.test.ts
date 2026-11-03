@@ -25,7 +25,7 @@ describe('worker boot without overrides', () => {
 
   it('runs the daily job end to end on fixture data', async () => {
     const result = (await app.get(JobRunner).run('daily', '2026-11-03')) as any;
-    expect(result.audit.findings).toBe(8);
-    expect(result.dispatch).toMatchObject({ flagsConsidered: 8, dryRun: true, sent: 0 });
+    expect(result.audit.findings).toBe(11);
+    expect(result.dispatch).toMatchObject({ flagsConsidered: 11, dryRun: true, sent: 0 });
   });
 });

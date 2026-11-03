@@ -41,7 +41,7 @@ describe('API with Google sign-in and roles', () => {
     expect(new Set(mine.body.map((f: any) => f.csmEmail))).toEqual(new Set(['ngozi.okafor@example.com']));
 
     const all = await http().get('/flags').set(as('director@example.com')).expect(200);
-    expect(all.body.length).toBe(8);
+    expect(all.body.length).toBe(11);
     expect(all.body[0].severity).toBe('urgent'); // most severe first
 
     const other = all.body.find((f: any) => f.csmEmail === 'tunde.bello@example.com');
@@ -89,6 +89,44 @@ describe('API with Google sign-in and roles', () => {
     await http().put('/rules/payroll_grace_business_days').set(as('admin@example.com')).send({ value: 3 }).expect(200);
     const rules = await http().get('/rules').set(as('director@example.com')).expect(200);
     expect(rules.body.find((r: any) => r.key === 'payroll_grace_business_days')).toMatchObject({ value: 3, updated_by: 'admin@example.com' });
+  });
+
+  it('serves the admin web app and its sign-in settings without a token', async () => {
+    const page = await http().get('/').expect(200);
+    expect(page.headers['content-type']).toContain('text/html');
+    expect(page.headers['content-security-policy']).toContain("frame-src https://accounts.google.com/gsi/");
+    expect(page.text).toContain('<title>Audit Assistant</title>');
+    expect(page.text).toContain('"ENGAGEMENT_DROUGHT":"No contact within the limit"');
+    await http().get('/app-config').expect(200, { googleClientId: 'test-client', authDisabled: false });
+  });
+
+  it('tells the web app who is signed in', async () => {
+    await http().get('/me').set(as('director@example.com')).expect(200, { email: 'director@example.com', role: 'cs_director' });
+  });
+
+  it('lets directors manage team leads, and logs it', async () => {
+    await http().put('/team/ngozi.okafor@example.com').set(as('ngozi.okafor@example.com')).send({ teamLeadEmail: 'lead@example.com' }).expect(403);
+    await http().put('/team/not-an-email').set(as('director@example.com')).send({ teamLeadEmail: 'lead@example.com' }).expect(400);
+    await http().put('/team/Ngozi.Okafor@example.com').set(as('director@example.com')).send({ teamLeadEmail: 'Lead@example.com' }).expect(200);
+    const list = await http().get('/team').set(as('director@example.com')).expect(200);
+    expect(list.body).toEqual([expect.objectContaining({ csmEmail: 'ngozi.okafor@example.com', teamLeadEmail: 'lead@example.com', updatedBy: 'director@example.com' })]);
+    await http().delete('/team/ngozi.okafor@example.com').set(as('director@example.com')).expect(200);
+    await http().delete('/team/ngozi.okafor@example.com').set(as('director@example.com')).expect(404);
+    const log = await db.query(`SELECT action FROM action_log WHERE object_type = 'csm_team' ORDER BY id`);
+    expect(log.rows.map((r) => r.action)).toEqual(['team.set', 'team.remove']);
+  });
+
+  it('accepts the new rule shapes and rejects bad ones', async () => {
+    const admin = as('admin@example.com');
+    await http().put('/rules/inactivity_days_by_health').set(admin).send({ value: { 'At Risk': 5 } }).expect(400); // no default
+    await http().put('/rules/inactivity_days_by_health').set(admin).send({ value: { 'At Risk': 5, default: 10 } }).expect(200);
+    await http().put('/rules/escalate_severities').set(admin).send({ value: ['urgent', 'critical'] }).expect(400);
+    await http().put('/rules/escalate_severities').set(admin).send({ value: ['urgent'] }).expect(200);
+  });
+
+  it('filters to escalated alerts', async () => {
+    const res = await http().get('/flags?escalated=true').set(as('director@example.com')).expect(200);
+    expect(res.body).toEqual([]);
   });
 
   it('runs jobs on demand for super admins', async () => {

@@ -7,7 +7,8 @@ import { Database } from '../db/database.js';
 import { hubspotPriority } from '../sources/source.types.js';
 import { ackUrl } from './ack-link.js';
 import { ALERT_SENDERS, type AlertSenders, type ChannelName } from './channels/channels.js';
-import { chatMessage, emailBody, emailSubject, taskBody, taskSubject } from './message-format.js';
+import { RulesRepository } from '../audits/rules.repository.js';
+import { chatMessage, emailBody, emailSubject, escalationNote, taskBody, taskSubject } from './message-format.js';
 
 export const MAX_ATTEMPTS = 3;
 const CHAT_SPACE = 'space:default';
@@ -45,6 +46,7 @@ export class AlertDispatcher {
     @Inject(FlagRepository) private readonly flags: FlagRepository,
     @Inject(ALERT_SENDERS) private readonly senders: AlertSenders,
     @Inject(RATIONALE_GENERATOR) private readonly rationale: RationaleGenerator,
+    @Inject(RulesRepository) private readonly rules: RulesRepository,
   ) {
     this.channels = cfg.ALERT_CHANNELS.filter((c): c is ChannelName =>
       ['google_chat', 'email', 'hubspot_task'].includes(c),
@@ -64,6 +66,8 @@ export class AlertDispatcher {
     if (pending.length === 0) return result;
 
     result.rationalesWritten = await this.addRationales(pending);
+    const rules = await this.rules.load();
+    const escalate = { severities: rules.escalate_severities, businessDays: rules.escalation_business_days };
     const done = await this.completedDeliveries(pending.map((f) => f.id));
     const isDone = (d: Delivery) => done.has(`${d.flagId}|${d.channel}|${d.recipient}`);
     const ack = (id: number) => ackUrl(this.cfg.APP_BASE_URL, this.cfg.ACK_LINK_SECRET, id);
@@ -92,7 +96,7 @@ export class AlertDispatcher {
         const recipient = to.join(',') || 'none';
         await this.deliverGroup(result, group.flags, 'email', recipient, isDone, async (flags) => {
           if (to.length === 0) return null;
-          const body = emailBody(group.csm, flags, ack);
+          const body = emailBody(group.csm, flags, ack, escalationNote(flags, escalate));
           return this.senders.email.send({ to, subject: emailSubject(flags), ...body });
         });
       }
@@ -160,13 +164,17 @@ export class AlertDispatcher {
 
     for (const f of flags) {
       await this.db.query(
-        `INSERT INTO alert (flag_id, channel, recipient, status, attempts, external_ref, error, sent_at)
-         VALUES ($1, $2, $3, $4, 1, $5, $6, CASE WHEN $4 = 'sent' THEN now() END)
-         ON CONFLICT (flag_id, channel, recipient) DO UPDATE
+        `INSERT INTO alert (flag_id, channel, recipient, kind, status, attempts, external_ref, error, sent_at)
+         VALUES ($1, $2, $3, 'notify', $4, 1, $5, $6, CASE WHEN $4 = 'sent' THEN now() END)
+         ON CONFLICT (flag_id, channel, recipient, kind) DO UPDATE
            SET status = EXCLUDED.status, attempts = alert.attempts + 1, external_ref = EXCLUDED.external_ref,
                error = EXCLUDED.error, sent_at = EXCLUDED.sent_at`,
         [f.id, channel, recipient, status, externalRef, error],
       );
+      if (status === 'sent') {
+        // The escalation clock (US-16) starts at the first successful delivery.
+        await this.db.query('UPDATE audit_flag SET notified_at = coalesce(notified_at, now()) WHERE id = $1', [f.id]);
+      }
       result[status] += 1;
     }
   }
@@ -175,7 +183,7 @@ export class AlertDispatcher {
   private async completedDeliveries(flagIds: number[]): Promise<Set<string>> {
     const { rows } = await this.db.query<{ flag_id: string; channel: string; recipient: string }>(
       `SELECT flag_id, channel, recipient FROM alert
-        WHERE flag_id = ANY($1) AND (status IN ('sent', 'skipped') OR attempts >= $2)`,
+        WHERE flag_id = ANY($1) AND kind = 'notify' AND (status IN ('sent', 'skipped') OR attempts >= $2)`,
       [flagIds, MAX_ATTEMPTS],
     );
     return new Set(rows.map((r) => `${r.flag_id}|${r.channel}|${r.recipient}`));

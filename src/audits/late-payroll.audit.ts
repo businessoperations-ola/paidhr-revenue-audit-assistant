@@ -1,6 +1,13 @@
 import { addDays, addMonthsClamped, daysInMonth, type BusinessCalendar, type IsoDate } from '../common/calendar.js';
 import type { ControlPanelAccount, Finding, HubSpotCompany, PayFrequency } from '../domain/types.js';
 
+const FREQUENCY_LABEL: Record<PayFrequency, string> = {
+  MONTHLY: 'Monthly',
+  SEMI_MONTHLY: 'Semi-monthly',
+  BIWEEKLY: 'Biweekly',
+  WEEKLY: 'Weekly',
+};
+
 /** The pay date that should follow `lastPayDate` for this schedule. */
 export function nextExpectedPayDate(
   lastPayDate: IsoDate,
@@ -61,7 +68,7 @@ export function auditLatePayroll(accounts: ControlPanelAccount[], opts: LatePayr
       companyName: company && company.controlPanelId !== a.clientId ? `${company.name} / ${a.name}` : a.name,
       csmEmail: company?.csmEmail ?? null,
       summary:
-        `${a.payFrequency.toLowerCase().replace('_', '-')} payroll expected ${expected} has not run: ` +
+        `${FREQUENCY_LABEL[a.payFrequency]} payroll expected ${expected} has not run: ` +
         `${overdue} business day(s) overdue (last run paid ${a.lastPayrollPayDate})`,
       details: {
         payFrequency: a.payFrequency,

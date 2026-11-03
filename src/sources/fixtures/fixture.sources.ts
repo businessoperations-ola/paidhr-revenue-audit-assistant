@@ -13,14 +13,14 @@ export const FIXTURE_COMPANIES: HubSpotCompany[] = [
     hubspotId: '1001', name: 'Adebayo Logistics', domain: 'adebayo-logistics.example', controlPanelId: 'CP-100',
     csmName: 'Ngozi Okafor', csmEmail: 'ngozi.okafor@example.com', csmOwnerId: '501', industry: 'Logistics',
     contractEndDate: '2027-03-31', seatTier: '50-99', paidSeats: 50, arrKobo: NGN(1_500_000),
-    pricePerSeatMonthlyKobo: NGN(2_500), healthStatus: 'Healthy',
+    pricePerSeatMonthlyKobo: NGN(2_500), healthStatus: 'Healthy', lastActivityDate: '2026-10-20',
   },
   {
     // US-01: 40 × ₦3,000 × 12 = ₦1,440,000 but ARR says ₦1,200,000
     hubspotId: '1002', name: 'Lekki Foods', domain: 'lekkifoods.example', controlPanelId: 'CP-200',
     csmName: 'Ngozi Okafor', csmEmail: 'ngozi.okafor@example.com', csmOwnerId: '501', industry: 'FMCG',
     contractEndDate: '2026-12-31', seatTier: '25-49', paidSeats: 40, arrKobo: NGN(1_200_000),
-    pricePerSeatMonthlyKobo: NGN(3_000), healthStatus: 'Neutral',
+    pricePerSeatMonthlyKobo: NGN(3_000), healthStatus: 'Neutral', lastActivityDate: '2026-10-30',
   },
   {
     // US-05: parent + 2 sub-accounts have 130 users vs 100 paid seats
@@ -28,6 +28,7 @@ export const FIXTURE_COMPANIES: HubSpotCompany[] = [
     csmName: 'Tunde Bello', csmEmail: 'tunde.bello@example.com', csmOwnerId: '502', industry: 'Conglomerate',
     contractEndDate: '2027-06-30', seatTier: '100+', paidSeats: 100, arrKobo: NGN(2_400_000),
     pricePerSeatMonthlyKobo: NGN(2_000), healthStatus: 'Healthy',
+    lastActivityDate: '2026-09-20', // US-14: 44 days, Healthy limit is 30
   },
   {
     // US-17: missing Industry and Seat Tier. US-03: no Control Panel ID.
@@ -35,6 +36,7 @@ export const FIXTURE_COMPANIES: HubSpotCompany[] = [
     csmName: 'Tunde Bello', csmEmail: 'tunde.bello@example.com', csmOwnerId: '502', industry: null,
     contractEndDate: '2027-01-31', seatTier: null, paidSeats: 20, arrKobo: NGN(480_000),
     pricePerSeatMonthlyKobo: NGN(2_000), healthStatus: 'At Risk',
+    lastActivityDate: '2026-10-24', // US-14: 10 days, At Risk limit is 7
   },
   {
     // US-03: linked to an account that was deactivated
@@ -42,6 +44,7 @@ export const FIXTURE_COMPANIES: HubSpotCompany[] = [
     csmName: null, csmEmail: null, csmOwnerId: null, industry: 'Manufacturing',
     contractEndDate: '2026-11-30', seatTier: '25-49', paidSeats: 30, arrKobo: NGN(900_000),
     pricePerSeatMonthlyKobo: NGN(2_500), healthStatus: 'At Risk',
+    lastActivityDate: null, // US-14: never contacted
   },
 ];
 
