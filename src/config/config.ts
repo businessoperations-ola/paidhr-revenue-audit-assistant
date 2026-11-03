@@ -71,6 +71,9 @@ const schema = z.object({
   APP_BASE_URL: z.string().default('http://localhost:8080'),
   ACK_LINK_SECRET: z.string().min(16).default('dev-only-change-me-please'),
 
+  // Shown as "Get help" on the sign-in screen when set.
+  HELP_EMAIL: z.string().email().optional(),
+
   // Staff sign-in with Google Workspace.
   GOOGLE_OAUTH_CLIENT_ID: z.string().optional(),
   GOOGLE_WORKSPACE_DOMAIN: z.string().optional(),

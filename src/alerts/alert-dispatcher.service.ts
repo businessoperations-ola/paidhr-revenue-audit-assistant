@@ -5,7 +5,7 @@ import { addDays, todayInLagos } from '../common/calendar.js';
 import { APP_CONFIG, type AppConfig } from '../config/config.js';
 import { Database } from '../db/database.js';
 import { hubspotPriority } from '../sources/source.types.js';
-import { ackUrl } from './ack-link.js';
+import { ackUrl, logoUrl } from './ack-link.js';
 import { ALERT_SENDERS, type AlertSenders, type ChannelName } from './channels/channels.js';
 import { RulesRepository } from '../audits/rules.repository.js';
 import { chatMessage, emailBody, emailSubject, escalationNote, taskBody, taskSubject } from './message-format.js';
@@ -96,7 +96,7 @@ export class AlertDispatcher {
         const recipient = to.join(',') || 'none';
         await this.deliverGroup(result, group.flags, 'email', recipient, isDone, async (flags) => {
           if (to.length === 0) return null;
-          const body = emailBody(group.csm, flags, ack, escalationNote(flags, escalate));
+          const body = emailBody(group.csm, flags, ack, escalationNote(flags, escalate), logoUrl(this.cfg.APP_BASE_URL));
           return this.senders.email.send({ to, subject: emailSubject(flags), ...body });
         });
       }
