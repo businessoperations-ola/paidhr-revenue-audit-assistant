@@ -190,7 +190,9 @@ resource appsEnv 'Microsoft.App/managedEnvironments@2024-03-01' = {
 var image = '${acr.properties.loginServer}/audit-assistant:${imageTag}'
 // The API's default address is known from the environment, so the API and the jobs can both use it.
 var apiBaseUrl = empty(publicBaseUrl) ? 'https://${prefix}-api.${appsEnv.properties.defaultDomain}' : publicBaseUrl
-var kv = keyVault.properties.vaultUri
+// Built from the vault's name, not keyVault.properties.vaultUri: the secrets list below is a
+// variable loop, and Bicep requires its values to be known before deployment starts (BCP182).
+var kv = 'https://${keyVault.name}${environment().suffixes.keyvaultDns}/'
 
 // Secrets live in Key Vault under these names; the apps read them via the managed identity.
 // All must exist before deploying (use a placeholder value for any channel not in use yet).
