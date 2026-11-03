@@ -11,12 +11,14 @@ import {
   Param,
   Put,
   Req,
+  StreamableFile,
 } from '@nestjs/common';
 import { z } from 'zod';
 import { Public, Roles, type AuthUser } from '../auth/auth.js';
 import { APP_CONFIG, type AppConfig } from '../config/config.js';
 import { Database } from '../db/database.js';
 import { ADMIN_APP_HTML } from '../web/admin-app.js';
+import { LOGO_BLUE_PNG, LOGO_WHITE_PNG } from '../web/brand/logos.js';
 
 type Req = { user: AuthUser };
 
@@ -110,9 +112,31 @@ export class WebAppController {
     return ADMIN_APP_HTML;
   }
 
+  /** Logo files, so alert emails can show the PaidHR logo. */
+  @Public()
+  @Get('brand/paidhr-logo-blue.png')
+  @Header('content-type', 'image/png')
+  @Header('cache-control', 'public, max-age=86400')
+  logoBlue() {
+    return new StreamableFile(LOGO_BLUE_PNG);
+  }
+
+  @Public()
+  @Get('brand/paidhr-logo-white.png')
+  @Header('content-type', 'image/png')
+  @Header('cache-control', 'public, max-age=86400')
+  logoWhite() {
+    return new StreamableFile(LOGO_WHITE_PNG);
+  }
+
   @Public()
   @Get('app-config')
   config() {
-    return { googleClientId: this.cfg.GOOGLE_OAUTH_CLIENT_ID ?? null, authDisabled: this.cfg.AUTH_DISABLED };
+    return {
+      googleClientId: this.cfg.GOOGLE_OAUTH_CLIENT_ID ?? null,
+      authDisabled: this.cfg.AUTH_DISABLED,
+      alertsDryRun: this.cfg.ALERTS_DRY_RUN,
+      helpEmail: this.cfg.HELP_EMAIL ?? null,
+    };
   }
 }

@@ -17,3 +17,8 @@ export function verifyAck(secret: string, flagId: number, sig: string): boolean 
   const given = Buffer.from(sig);
   return expected.length === given.length && timingSafeEqual(expected, given);
 }
+
+/** Public URL of the white PaidHR logo served by the API, for the blue header of HTML emails. */
+export function logoUrl(baseUrl: string): string {
+  return `${baseUrl.replace(/\/$/, '')}/brand/paidhr-logo-white.png`;
+}

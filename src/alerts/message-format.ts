@@ -69,6 +69,7 @@ export function emailBody(
   flags: StoredFlag[],
   ackUrl: AckUrlFn,
   note: string | null = null,
+  logoUrl: string | null = null,
 ): { text: string; html: string } {
   const greeting = recipient ? 'Hi,' : 'These accounts have no CSM assigned in HubSpot.';
   const text = [
@@ -88,27 +89,20 @@ export function emailBody(
     ...(note ? [note] : []),
   ].join('\n');
 
-  const rows = flags
-    .map(
-      (f) => `<tr>
-  <td style="padding:8px;border-bottom:1px solid #ddd;vertical-align:top"><strong>${escapeHtml(f.companyName)}</strong><br>
-    <span style="color:${f.severity === 'urgent' ? '#b42318' : '#555'}">${escapeHtml(FLAG_TITLES[f.type])} · ${f.severity}</span></td>
-  <td style="padding:8px;border-bottom:1px solid #ddd;vertical-align:top">${escapeHtml(f.summary)}${
-    f.aiRationale
-      ? `<br><br><em>Why:</em> ${escapeHtml(f.aiRationale.explanation)}<br><em>Next step:</em> ${escapeHtml(f.aiRationale.recommended_action)}`
-      : ''
-  }</td>
-  <td style="padding:8px;border-bottom:1px solid #ddd;vertical-align:top"><a href="${escapeHtml(ackUrl(f.id))}">Acknowledge</a></td>
-</tr>`,
-    )
-    .join('\n');
-
-  const html = `<div style="font-family:Arial,sans-serif;font-size:14px;color:#111">
-<p>${escapeHtml(greeting)}</p>
-<p>The Revenue &amp; Data Audit Assistant found the following:</p>
-<table style="border-collapse:collapse;width:100%">${rows}</table>
-${note ? `<p style="color:#555">${escapeHtml(note)}</p>` : ''}
-</div>`;
+  const html = brandedEmailHtml({
+    logoUrl,
+    heading: flags.some((f) => f.severity === 'urgent') ? 'Urgent: action needed' : 'New audit alerts',
+    intro: [greeting, 'The Revenue & Data Audit Assistant found the following:'],
+    items: flags.map((f) => ({
+      flag: f,
+      lines: [
+        f.summary,
+        ...(f.aiRationale ? [`Why: ${f.aiRationale.explanation}`, `Next step: ${f.aiRationale.recommended_action}`] : []),
+      ],
+      ackUrl: ackUrl(f.id),
+    })),
+    footer: note,
+  });
   return { text, html };
 }
 
@@ -223,4 +217,91 @@ export function escalationChat(route: EscalationRoute, csm: string | null, items
         `*${chatSafe(f.companyName)}*: ${FLAG_TITLES[f.type]} · open ${businessDaysWaiting} business days, ${itemState(f)}\n${chatSafe(f.summary)}\n<${ackUrl(f.id)}|Acknowledge>`,
     ),
   ].join('\n\n');
+}
+
+/* ---------- Branded HTML email (PaidHR colours; tables and inline styles for email clients) ---------- */
+
+const BRAND = {
+  blue: '#004AF5',
+  navy: '#012B86',
+  navInk: '#0B2D74',
+  midnight: '#0B1A3C',
+  yellow: '#FDC023',
+  page: '#F6F7FF',
+  muted: '#485266',
+  line: '#E3E6EF',
+  font: "Gilroy, 'Plus Jakarta Sans', 'Segoe UI', Arial, sans-serif",
+};
+
+const SEVERITY_STYLE: Record<string, { fg: string; bg: string }> = {
+  urgent: { fg: '#C4320A', bg: '#FDEEE8' },
+  high: { fg: '#B54708', bg: '#FEF3E2' },
+  medium: { fg: '#8A6100', bg: '#FFF6D6' },
+  low: { fg: '#485266', bg: '#EEF0F5' },
+};
+
+export interface BrandedEmailItem {
+  flag: StoredFlag;
+  lines: string[];
+  ackUrl: string;
+}
+
+export function brandedEmailHtml(opts: {
+  logoUrl: string | null;
+  heading: string;
+  intro: string[];
+  items: BrandedEmailItem[];
+  footer: string | null;
+}): string {
+  const items = opts.items
+    .map(({ flag: f, lines, ackUrl }) => {
+      const sev = SEVERITY_STYLE[f.severity] ?? SEVERITY_STYLE.low!;
+      return `<tr><td style="padding:16px 0;border-top:1px solid ${BRAND.line}">
+  <span style="display:inline-block;font-size:12px;font-weight:600;color:${sev.fg};background:${sev.bg};border-radius:999px;padding:3px 10px;text-transform:capitalize">${escapeHtml(f.severity)}</span>
+  <div style="font-size:16px;font-weight:700;color:${BRAND.navInk};margin:8px 0 2px">${escapeHtml(f.companyName)}</div>
+  <div style="font-size:14px;font-weight:600;color:${BRAND.navy};margin-bottom:6px">${escapeHtml(FLAG_TITLES[f.type])}</div>
+  ${lines.map((l) => `<div style="font-size:14px;line-height:1.55;color:${BRAND.muted};margin-bottom:4px">${escapeHtml(l)}</div>`).join('')}
+  <a href="${escapeHtml(ackUrl)}" style="display:inline-block;margin-top:10px;background:${BRAND.blue};color:#ffffff;text-decoration:none;font-weight:600;font-size:14px;padding:9px 18px;border-radius:8px">Acknowledge</a>
+</td></tr>`;
+    })
+    .join('\n');
+
+  return `<!doctype html><html><body style="margin:0;padding:0;background:${BRAND.page}">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${BRAND.page};font-family:${BRAND.font}">
+<tr><td align="center" style="padding:24px 12px">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid ${BRAND.line}">
+  <tr><td style="background:${BRAND.blue};padding:20px 28px">
+    ${opts.logoUrl ? `<img src="${escapeHtml(opts.logoUrl)}" alt="PaidHR" height="28" style="display:block;height:28px;width:auto;border:0">` : `<span style="color:#ffffff;font-size:20px;font-weight:700">PaidHR</span>`}
+  </td></tr>
+  <tr><td style="height:4px;background:${BRAND.yellow};line-height:4px;font-size:0">&nbsp;</td></tr>
+  <tr><td style="padding:24px 28px 8px">
+    <div style="font-size:22px;font-weight:700;color:${BRAND.navy};margin-bottom:10px">${escapeHtml(opts.heading)}</div>
+    ${opts.intro.map((p) => `<p style="margin:0 0 8px;font-size:15px;color:${BRAND.muted}">${escapeHtml(p)}</p>`).join('')}
+  </td></tr>
+  <tr><td style="padding:0 28px 8px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0">${items}</table></td></tr>
+  ${opts.footer ? `<tr><td style="padding:12px 28px 24px;font-size:13px;color:${BRAND.muted};border-top:1px solid ${BRAND.line}">${escapeHtml(opts.footer)}</td></tr>` : ''}
+  <tr><td style="background:${BRAND.midnight};padding:14px 28px;font-size:12px;color:#ffffff">PaidHR <span style="color:${BRAND.yellow};font-weight:600">Revenue &amp; Data Audit Assistant</span></td></tr>
+</table>
+</td></tr></table></body></html>`;
+}
+
+/** The branded HTML version of an escalation email; the text version is escalationText. */
+export function escalationHtml(
+  route: EscalationRoute,
+  csm: string | null,
+  items: EscalationItem[],
+  ackUrl: AckUrlFn,
+  logoUrl: string | null,
+): string {
+  return brandedEmailHtml({
+    logoUrl,
+    heading: route === 'lead' ? 'Escalation: alerts need follow-up' : 'Director escalation',
+    intro: [intro(route, csm)],
+    items: items.map(({ flag: f, businessDaysWaiting }) => ({
+      flag: f,
+      lines: [f.summary, `Open ${businessDaysWaiting} business days, ${itemState(f)}.`],
+      ackUrl: ackUrl(f.id),
+    })),
+    footer: outro(route),
+  });
 }

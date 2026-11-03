@@ -1,5 +1,6 @@
 import { FLAG_TITLES } from '../alerts/message-format.js';
 import { MANDATORY_FIELDS } from '../audits/hygiene.audit.js';
+import { LOGO_BLUE_DATA_URI, LOGO_WHITE_DATA_URI } from './brand/logos.js';
 
 /**
  * The admin web app (phase 2): alert inbox, rules, team leads, reconciliation.
@@ -12,71 +13,112 @@ export const ADMIN_APP_HTML = /* html */ `<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Audit Assistant</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<title>PaidHR Audit Assistant</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
 <style>
+/*
+ * PaidHR brand, sampled from paidhr.com: brand blue #004AF5 / #154BF5, navy headings #012B86,
+ * nav navy #0B2D74, midnight #0B1A3C, yellow #FDC023, page #F6F7FF, icon circles #D7E4FF.
+ * Type: Gilroy (PaidHR's licensed font) when installed, else Plus Jakarta Sans.
+ * Light only, like PaidHR's own product.
+ */
 :root {
-  --bg: #f6f7f8; --surface: #fff; --ink: #15201d; --muted: #5b6b67; --line: #dde3e1;
-  --accent: #0d6b5a; --accent-soft: #e2f1ec;
-  --urgent: #b42318; --urgent-soft: #fdecea; --high: #b54708; --high-soft: #fdf1e3;
-  --medium: #8a6d00; --medium-soft: #fbf5d8; --low: #475467; --low-soft: #eef1f4;
-  --font: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif; --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  --blue: #004af5; --blue-2: #154bf5; --blue-hover: #003ccc; --blue-soft: #d7e4ff; --blue-faint: #eef3ff;
+  --navy: #012b86; --nav-ink: #0b2d74; --midnight: #0b1a3c; --yellow: #fdc023;
+  --bg: #f6f7ff; --surface: #ffffff; --ink: #0b1a3c; --muted: #485266; --faint: #7f828c;
+  --line: #e3e6ef; --field: #c6c5ca;
+  --urgent: #c4320a; --urgent-soft: #fdeee8; --high: #b54708; --high-soft: #fef3e2;
+  --medium: #8a6100; --medium-soft: #fff6d6; --low: #485266; --low-soft: #eef0f5;
+  --ok: #027a48; --ok-soft: #e7f6ee;
+  --font: "Gilroy", "Plus Jakarta Sans", "Segoe UI", system-ui, sans-serif;
+  color-scheme: light;
 }
-@media (prefers-color-scheme: dark) { :root {
-  --bg: #0f1514; --surface: #171f1d; --ink: #e7eeec; --muted: #9aaba6; --line: #2a3634;
-  --accent: #4cc2a6; --accent-soft: #15302a; --urgent: #f97066; --urgent-soft: #3a1714;
-  --high: #f7a35c; --high-soft: #3a2412; --medium: #e3c34a; --medium-soft: #332c0e; --low: #a5b2c2; --low-soft: #222a33;
-  color-scheme: dark; } }
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
-body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.5 var(--font); }
-header { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px; padding: 12px max(16px, 3vw); background: var(--surface); border-bottom: 1px solid var(--line); }
-header h1 { font-size: 16px; margin: 0; font-weight: 600; }
-nav { display: flex; gap: 4px; flex-wrap: wrap; }
-nav button { font: 500 14px var(--font); padding: 6px 12px; border-radius: 6px; border: 0; background: none; color: var(--muted); cursor: pointer; }
-nav button[aria-current="page"] { background: var(--accent-soft); color: var(--accent); }
-.who { margin-left: auto; font-size: 13px; color: var(--muted); display: flex; gap: 10px; align-items: center; }
-main { padding: 20px max(16px, 3vw) 48px; max-width: 1200px; margin: 0 auto; display: grid; gap: 16px; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.55 var(--font); }
+h1, h2, h3 { color: var(--navy); font-weight: 700; letter-spacing: -0.01em; }
+
+/* Announcement strip, as on paidhr.com */
+.strip { background: var(--midnight); color: #fff; text-align: center; font-size: 13.5px; font-weight: 500; padding: 9px 16px; }
+.strip b { color: var(--yellow); font-weight: 600; }
+
+header.top { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 28px; padding: 14px max(16px, 3vw); background: var(--bg); border-bottom: 1px solid var(--line); }
+.brand { display: flex; align-items: center; gap: 12px; text-decoration: none; }
+.brand img { height: 30px; width: auto; display: block; }
+.brand span { font-weight: 600; color: var(--nav-ink); font-size: 14px; padding-left: 12px; border-left: 1px solid var(--field); white-space: nowrap; }
+nav { display: flex; gap: 6px; flex-wrap: wrap; }
+nav button { font: 500 15px var(--font); padding: 8px 10px; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--nav-ink); cursor: pointer; }
+nav button:hover { color: var(--blue-2); }
+nav button[aria-current="page"] { color: var(--blue-2); border-bottom-color: var(--blue-2); }
+.who { margin-left: auto; font-size: 13px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+
+main { padding: 24px max(16px, 3vw) 56px; max-width: 1200px; margin: 0 auto; display: grid; gap: 16px; }
 main > * { min-width: 0; }
-.who { flex-wrap: wrap; }
-h2 { font-size: 20px; margin: 0; }
-.bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-select, input, button.btn { font: 14px var(--font); padding: 6px 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
-button.btn { cursor: pointer; }
-button.primary { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+h2 { font-size: 24px; margin: 0; }
+.bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+select, input { font: 14px var(--font); padding: 8px 12px; border-radius: 8px; border: 1px solid var(--field); background: var(--surface); color: var(--ink); }
+input::placeholder { color: #afb3b8; }
+input[type="checkbox"] { accent-color: var(--blue); width: 16px; height: 16px; padding: 0; vertical-align: -3px; }
+button.btn { font: 600 14px var(--font); padding: 8px 16px; border-radius: 8px; border: 1px solid var(--blue); background: var(--surface); color: var(--blue); cursor: pointer; }
+button.btn:hover { background: var(--blue-faint); }
+button.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+button.primary:hover { background: var(--blue-hover); border-color: var(--blue-hover); }
 button:disabled { opacity: .5; cursor: default; }
-button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 1px 2px rgba(11, 26, 60, .04); }
 .table-wrap { overflow-x: auto; }
 table { border-collapse: collapse; width: 100%; min-width: 760px; }
-th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
-th { font: 500 12px var(--mono); color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+th, td { text-align: left; padding: 12px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 12px; font-weight: 600; color: var(--faint); text-transform: uppercase; letter-spacing: .05em; background: var(--surface); }
 tbody tr { cursor: pointer; }
-tbody tr:hover { background: var(--bg); }
-.chip { display: inline-block; font: 600 11.5px var(--font); padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+tbody tr:hover { background: var(--blue-faint); }
+tbody tr:last-child td { border-bottom: 0; }
+td strong { color: var(--nav-ink); }
+.chip { display: inline-block; font: 600 12px var(--font); padding: 3px 10px; border-radius: 999px; white-space: nowrap; }
 .chip.sev { text-transform: capitalize; }
 .urgent { color: var(--urgent); background: var(--urgent-soft); } .high { color: var(--high); background: var(--high-soft); }
 .medium { color: var(--medium); background: var(--medium-soft); } .low { color: var(--low); background: var(--low-soft); }
 .esc { color: var(--urgent); background: var(--urgent-soft); }
-.ok { color: var(--accent); background: var(--accent-soft); }
+.ok { color: var(--ok); background: var(--ok-soft); }
 .muted { color: var(--muted); }
-.small { font-size: 12.5px; }
-.mono { font-family: var(--mono); font-size: 12.5px; }
-.detail { padding: 16px; display: grid; gap: 10px; }
+.small { font-size: 13px; }
+.mono { font-family: ui-monospace, "SFMono-Regular", Menlo, monospace; font-size: 12.5px; }
+.detail { padding: 20px; display: grid; gap: 10px; }
 .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
-.rule { padding: 16px; display: grid; gap: 8px; align-content: start; }
-.rule h3 { font-size: 14px; margin: 0; font-family: var(--mono); }
+.rule { padding: 18px; display: grid; gap: 8px; align-content: start; }
+.rule > strong { color: var(--navy); font-size: 15px; }
 .rule .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.notice { padding: 10px 14px; border-radius: 8px; background: var(--accent-soft); color: var(--accent); }
+.notice { padding: 10px 14px; border-radius: 8px; background: var(--blue-soft); color: var(--navy); font-weight: 500; }
 .notice.err { background: var(--urgent-soft); color: var(--urgent); }
-.signin { display: grid; place-items: center; gap: 16px; padding: 80px 16px; text-align: center; }
-.stat { padding: 14px 16px; display: grid; gap: 2px; }
-.stat b { font-size: 24px; font-variant-numeric: tabular-nums; }
+.stat { padding: 16px 18px; display: grid; gap: 2px; }
+.stat b { font-size: 30px; color: var(--blue-2); font-variant-numeric: tabular-nums; line-height: 1.2; }
+.stat span:first-of-type { font-weight: 600; color: var(--nav-ink); }
+
+/* Sign-in: PaidHR login layout. Brand blue, yellow diagonal band, white card. */
+.signin-page { position: fixed; inset: 0; overflow: auto; background: var(--blue); color: #fff; display: grid; grid-template-rows: auto 1fr; z-index: 5; }
+.signin-page::before { content: ""; position: fixed; right: -12vw; bottom: -30vh; width: 34vw; height: 120vh; background: var(--yellow); transform: rotate(45deg); transform-origin: center; z-index: -1; }
+.signin-page { isolation: isolate; }
+.signin-top { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 28px max(20px, 3vw); }
+.signin-top img { height: 40px; width: auto; display: block; }
+.signin-top a { color: #fff; font-weight: 700; text-decoration: none; font-size: 15px; }
+.signin-top a b { color: var(--yellow); }
+.signin-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 420px); gap: 40px; align-items: center; padding: 24px max(20px, 5vw) 64px; }
+@media (max-width: 860px) { .signin-body { grid-template-columns: 1fr; } .signin-page::before { display: none; } }
+.signin-pitch h1 { color: #fff; font-size: clamp(34px, 5vw, 56px); line-height: 1.08; margin: 0 0 18px; font-weight: 700; }
+.signin-pitch p { font-size: 18px; color: rgba(255, 255, 255, .9); max-width: 32ch; margin: 0; }
+.signin-card { background: #fff; color: var(--ink); border-radius: 6px; padding: 40px 36px; display: grid; gap: 14px; box-shadow: 0 20px 50px rgba(11, 26, 60, .25); }
+.signin-card h2 { color: #000; font-size: 34px; font-weight: 700; }
+.signin-card p { margin: 0; color: var(--muted); font-size: 15px; }
+.signin-card .gbtn-wrap { min-height: 44px; margin-top: 8px; }
+.signin-card .fine { font-size: 13px; color: var(--faint); border-top: 1px solid var(--line); padding-top: 14px; margin-top: 6px; }
 </style>
 </head>
 <body>
-<header>
-  <h1>Audit Assistant</h1>
+<div class="strip" id="strip" hidden>Alerts are in <b>dry-run mode</b>: nothing is sent to CSMs, team leads or HubSpot.</div>
+<header class="top" id="top" hidden>
+  <a class="brand" href="#alerts" aria-label="PaidHR Audit Assistant"><img src="${LOGO_BLUE_DATA_URI}" alt="PaidHR" width="86" height="30"><span>Audit Assistant</span></a>
   <nav id="nav" hidden>
     <button data-view="alerts" aria-current="page">Alerts</button>
     <button data-view="rules">Rules</button>
@@ -85,12 +127,27 @@ tbody tr:hover { background: var(--bg); }
   </nav>
   <div class="who" id="who"></div>
 </header>
-<main>
+<section id="signin" class="signin-page" hidden>
+  <div class="signin-top">
+    <img src="${LOGO_WHITE_DATA_URI}" alt="PaidHR" width="126" height="40">
+    <a id="help" href="#" hidden>Having trouble? <b>Get help →</b></a>
+  </div>
+  <div class="signin-body">
+    <div class="signin-pitch">
+      <h1>Revenue &amp; Data Audit Assistant</h1>
+      <p>Billing checks, late payroll and customer engagement alerts for the PaidHR CX team.</p>
+    </div>
+    <div class="signin-card">
+      <h2>Welcome back!</h2>
+      <p>Sign in with your PaidHR Google Workspace account.</p>
+      <div id="signin-notice" class="notice err" role="alert" hidden></div>
+      <div class="gbtn-wrap" id="gbtn"></div>
+      <p class="fine">Only company accounts with access granted by a super admin can sign in.</p>
+    </div>
+  </div>
+</section>
+<main id="app">
   <div id="notice" class="notice" role="status" hidden></div>
-  <section id="signin" class="signin" hidden>
-    <h2>Sign in with your company Google account</h2>
-    <div id="gbtn"></div>
-  </section>
 
   <section id="view-alerts" hidden>
     <div class="bar" style="margin-bottom:12px">
@@ -148,7 +205,7 @@ const RULE_LABELS = {
   mandatory_fields: 'Mandatory HubSpot fields',
   seat_history_days: 'Seat history to compare (days)',
 };
-const state = { token: null, me: null, view: 'alerts' };
+const state = { token: null, me: null, view: 'alerts', dryRun: false };
 
 function el(tag, attrs = {}, ...children) {
   const n = document.createElement(tag);
@@ -162,6 +219,8 @@ function el(tag, attrs = {}, ...children) {
 }
 const $ = (id) => document.getElementById(id);
 function notice(text, isError) {
+  // Signed out, errors show on the sign-in card; signed in, in the page.
+  if (!state.me && isError && text) { const s = $('signin-notice'); s.textContent = text; s.hidden = false; return; }
   const n = $('notice'); n.textContent = text; n.className = 'notice' + (isError ? ' err' : ''); n.hidden = !text;
   if (text && !isError) setTimeout(() => { if (n.textContent === text) n.hidden = true; }, 4000);
 }
@@ -182,28 +241,33 @@ function signOut(message) {
   state.token = null; state.me = null; store('idToken', null);
   $('nav').hidden = true; $('who').textContent = '';
   document.querySelectorAll('main > section').forEach((s) => (s.hidden = true));
+  $('top').hidden = true; $('app').hidden = true; $('strip').hidden = true;
   $('signin').hidden = false;
   if (message) notice(message, true);
 }
 
 async function start() {
   const cfg = await fetch('/app-config').then((r) => r.json());
+  state.dryRun = !!cfg.alertsDryRun;
+  if (cfg.helpEmail) { $('help').href = 'mailto:' + cfg.helpEmail; $('help').hidden = false; }
   if (cfg.authDisabled) return enter();
   state.token = recall('idToken');
   if (state.token) { try { return await enter(); } catch { /* fall through to sign-in */ } }
+  $('top').hidden = true; $('app').hidden = true;
   $('signin').hidden = false;
   if (!cfg.googleClientId) { notice('Google sign-in is not configured (GOOGLE_OAUTH_CLIENT_ID).', true); return; }
   const s = el('script', { src: 'https://accounts.google.com/gsi/client', async: true });
   s.onload = () => {
     google.accounts.id.initialize({ client_id: cfg.googleClientId, callback: (r) => { state.token = r.credential; store('idToken', r.credential); enter().catch((e) => notice(e.message, true)); } });
-    google.accounts.id.renderButton($('gbtn'), { theme: 'outline', size: 'large', text: 'signin_with' });
+    google.accounts.id.renderButton($('gbtn'), { theme: 'filled_blue', size: 'large', text: 'signin_with', shape: 'rectangular', width: 340 });
   };
   document.head.append(s);
 }
 
 async function enter() {
   state.me = await api('/me');
-  $('signin').hidden = true; $('nav').hidden = false; notice('');
+  $('signin').hidden = true; $('signin-notice').hidden = true;
+  $('top').hidden = false; $('app').hidden = false; $('nav').hidden = false; $('strip').hidden = !state.dryRun; notice('');
   $('who').replaceChildren(el('span', {}, state.me.email + ' · ' + state.me.role.replace(/_/g, ' ')),
     el('button', { class: 'btn', onclick: () => signOut() }, 'Sign out'));
   show(location.hash.slice(1) || 'alerts');

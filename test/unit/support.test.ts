@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ackSignature, ackUrl, verifyAck } from '../../src/alerts/ack-link.js';
-import { chatMessage, emailBody, emailSubject, escalationNote } from '../../src/alerts/message-format.js';
+import { chatMessage, emailBody, emailSubject, escalationHtml, escalationNote } from '../../src/alerts/message-format.js';
 import type { StoredFlag } from '../../src/audits/flag.repository.js';
 import { BusinessCalendar, addMonthsClamped, todayInLagos } from '../../src/common/calendar.js';
 import { formatNgn, parseNgnToKobo } from '../../src/common/money.js';
@@ -73,6 +73,22 @@ describe('message formatting', () => {
     const withAi = flag({ aiRationale: { explanation: 'e', likely_cause: 'c', recommended_action: 'Update the deal ARR', model: 'm' } });
     expect(chatMessage(null, [withAi], ack)).toContain('_Next step:_ Update the deal ARR');
     expect(chatMessage(null, [withAi], ack)).toContain('unassigned accounts');
+  });
+
+  it('renders branded HTML email with the hosted logo and blue Acknowledge buttons', () => {
+    const { html } = emailBody('a@x.com', [flag({ severity: 'urgent', type: 'LATE_PAYROLL' })], ack, 'Footer note', 'https://audit.example.com/brand/paidhr-logo-white.png');
+    expect(html).toContain('src="https://audit.example.com/brand/paidhr-logo-white.png"');
+    expect(html).toContain('background:#004AF5'); // brand blue header and buttons
+    expect(html).toContain('background:#FDC023'); // yellow rule
+    expect(html).toContain('Urgent: action needed');
+    expect(html).toContain('href="https://a/ack/1"');
+    expect(html).toContain('Footer note');
+    // Without a logo URL it falls back to the word mark.
+    expect(emailBody('a@x.com', [flag({})], ack).html).toContain('>PaidHR</span>');
+    const esc = escalationHtml('director_no_lead', 'ada@x.com', [{ flag: flag({}), businessDaysWaiting: 3 }], ack, null);
+    expect(esc).toContain('Director escalation');
+    expect(esc).toContain('has no team lead on record');
+    expect(esc).toContain('Open 3 business days, not acknowledged.');
   });
 
   it('only promises escalation for flags that actually escalate', () => {

@@ -5,10 +5,11 @@ import { RulesRepository, type AuditRules } from '../audits/rules.repository.js'
 import { todayInLagos, type BusinessCalendar, type IsoDate } from '../common/calendar.js';
 import { APP_CONFIG, type AppConfig } from '../config/config.js';
 import { Database } from '../db/database.js';
-import { ackUrl } from './ack-link.js';
+import { ackUrl, logoUrl } from './ack-link.js';
 import { ALERT_SENDERS, type AlertSenders, type ChannelName } from './channels/channels.js';
 import {
   escalationChat,
+  escalationHtml,
   escalationSubject,
   escalationText,
   levelOf,
@@ -121,7 +122,7 @@ export class EscalationService {
               to: g.to,
               subject: escalationSubject(g.route, g.csm, g.items),
               text: escalationText(g.route, g.csm, g.items, ack),
-              html: `<pre style="font:14px/1.5 Arial,sans-serif;white-space:pre-wrap">${escapeHtml(escalationText(g.route, g.csm, g.items, ack))}</pre>`,
+              html: escalationHtml(g.route, g.csm, g.items, ack, logoUrl(this.cfg.APP_BASE_URL)),
             }),
           )) || sentAny;
       }
@@ -203,8 +204,4 @@ export class EscalationService {
     // Sorted here rather than in SQL, so the order doesn't depend on the database collation.
     return rows.length > 0 ? rows.map((r) => r.email).sort() : this.cfg.FALLBACK_ALERT_EMAILS;
   }
-}
-
-function escapeHtml(s: string): string {
-  return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 }

@@ -82,6 +82,10 @@ Open the API's address in a browser and sign in with your company Google account
 - **Team leads:** which team lead each CSM escalates to. Directors can edit.
 - **Reconciliation:** the latest HubSpot vs Control Panel counts and the sub-account tree.
 
+The app and the HTML alert emails use the PaidHR brand: brand blue `#004AF5`, navy `#012B86`, yellow `#FDC023` and midnight `#0B1A3C`, sampled from paidhr.com. Type is Gilroy where it's installed, otherwise Plus Jakarta Sans. While alerts are in dry-run mode, a navy strip across the top says so. Set `HELP_EMAIL` to show a "Get help" link on the sign-in screen.
+
+The logo files in `src/web/brand/` were cut from screenshots of paidhr.com. To use the official artwork, replace `paidhr-logo-blue.png` (for light backgrounds) and `paidhr-logo-white.png` (for blue backgrounds), then run `python3 scripts/embed-brand.py`. Emails load the white logo from `<APP_BASE_URL>/brand/paidhr-logo-white.png`.
+
 The app is served by the API itself, so it needs no separate hosting. Add the API's address as an authorised JavaScript origin on the Google OAuth client.
 
 ## API
