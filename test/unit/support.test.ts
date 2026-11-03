@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { ackSignature, ackUrl, verifyAck } from '../../src/alerts/ack-link.js';
-import { chatMessage, emailBody, emailSubject } from '../../src/alerts/message-format.js';
+import { chatMessage, emailBody, emailSubject, escalationNote } from '../../src/alerts/message-format.js';
 import type { StoredFlag } from '../../src/audits/flag.repository.js';
 import { BusinessCalendar, addMonthsClamped, todayInLagos } from '../../src/common/calendar.js';
 import { formatNgn, parseNgnToKobo } from '../../src/common/money.js';
@@ -56,7 +56,7 @@ describe('message formatting', () => {
   const flag = (over: Partial<StoredFlag>): StoredFlag => ({
     id: 1, type: 'ARR_MISMATCH', entityKey: 'hs:1', status: 'open', severity: 'high', hubspotCompanyId: '1',
     controlPanelId: 'c', companyName: 'Acme <Ltd>', csmEmail: 'ada@x.com', summary: 'ARR off by ₦5', details: {},
-    aiRationale: null, firstSeenAt: '', acknowledgedAt: null, acknowledgedBy: null, ...over,
+    aiRationale: null, firstSeenAt: '', acknowledgedAt: null, acknowledgedBy: null, notifiedAt: null, escalationLevel: 0, escalatedAt: null, escalatedOn: null, ...over,
   });
   const ack = (id: number) => `https://a/ack/${id}`;
 
@@ -73,6 +73,15 @@ describe('message formatting', () => {
     const withAi = flag({ aiRationale: { explanation: 'e', likely_cause: 'c', recommended_action: 'Update the deal ARR', model: 'm' } });
     expect(chatMessage(null, [withAi], ack)).toContain('_Next step:_ Update the deal ARR');
     expect(chatMessage(null, [withAi], ack)).toContain('unassigned accounts');
+  });
+
+  it('only promises escalation for flags that actually escalate', () => {
+    const rules = { severities: ['urgent', 'high'], businessDays: 3 };
+    const note = escalationNote([flag({ severity: 'high' })], rules);
+    expect(note).toBe('If urgent and high alerts are not acknowledged within 3 business days, they go to your team lead.');
+    expect(emailBody('a@x.com', [flag({})], ack, note).text).toContain(note!);
+    expect(escalationNote([flag({ severity: 'low' })], rules)).toBeNull();
+    expect(emailBody('a@x.com', [flag({ severity: 'low' })], ack, null).text).not.toContain('team lead');
   });
 });
 

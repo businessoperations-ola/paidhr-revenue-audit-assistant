@@ -48,6 +48,8 @@ const schema = z.object({
   HS_PROP_ARR: z.string().default('arr_ngn'),
   HS_PROP_PRICE_PER_SEAT: z.string().default('price_per_seat_monthly_ngn'),
   HS_PROP_HEALTH: z.string().default('health_status'),
+  // HubSpot's built-in "Last contacted": last logged call, meeting or email (US-14).
+  HS_PROP_LAST_ACTIVITY: z.string().default('notes_last_contacted'),
   // Only companies in this lifecycle stage are audited.
   HS_CUSTOMER_LIFECYCLE_STAGE: z.string().default('customer'),
 

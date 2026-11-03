@@ -5,6 +5,7 @@ import { Database } from '../db/database.js';
 import type { ControlPanelAccount, FlagType, Finding, HubSpotCompany } from '../domain/types.js';
 import { SnapshotRepository } from '../ingestion/snapshot.repository.js';
 import { auditArrMath } from './arr-math.audit.js';
+import { auditEngagement } from './engagement.audit.js';
 import { FlagRepository } from './flag.repository.js';
 import { buildRollups, type AccountRollup } from './hierarchy.js';
 import { auditHygiene } from './hygiene.audit.js';
@@ -25,6 +26,7 @@ export const PHASE1_FLAG_TYPES: FlagType[] = [
   'SEAT_OVERAGE',
   'MISSING_FIELDS',
   'LATE_PAYROLL',
+  'ENGAGEMENT_DROUGHT',
 ];
 
 export interface AuditRunResult {
@@ -95,6 +97,7 @@ export function runAllAudits(input: {
       companyFor: companyLookup(companies, accounts),
     }),
   );
+  findings.push(...auditEngagement(companies, input.today, rules.inactivity_days_by_health));
 
   return { findings, reconciliation: reconciliation.summary, rollups };
 }

@@ -24,11 +24,11 @@ export class SnapshotRepository {
     if (companies.length > 0) {
       await client.query(
         `INSERT INTO hs_company_snapshot (snapshot_date, hubspot_id, name, domain, control_panel_id, csm_name, csm_email,
-            csm_owner_id, industry, contract_end_date, seat_tier, paid_seats, arr_kobo, price_per_seat_monthly_kobo, health_status)
+            csm_owner_id, industry, contract_end_date, seat_tier, paid_seats, arr_kobo, price_per_seat_monthly_kobo, health_status, last_activity_date)
          SELECT $1::date, * FROM jsonb_to_recordset($2::jsonb) AS x(
             hubspot_id text, name text, domain text, control_panel_id text, csm_name text, csm_email text,
             csm_owner_id text, industry text, contract_end_date date, seat_tier text, paid_seats int,
-            arr_kobo bigint, price_per_seat_monthly_kobo bigint, health_status text)`,
+            arr_kobo bigint, price_per_seat_monthly_kobo bigint, health_status text, last_activity_date date)`,
         [
           date,
           JSON.stringify(
@@ -47,6 +47,7 @@ export class SnapshotRepository {
               arr_kobo: c.arrKobo?.toString() ?? null,
               price_per_seat_monthly_kobo: c.pricePerSeatMonthlyKobo?.toString() ?? null,
               health_status: c.healthStatus,
+              last_activity_date: c.lastActivityDate,
             })),
           ),
         ],
@@ -129,6 +130,7 @@ export class SnapshotRepository {
       arrKobo: big(r.arr_kobo),
       pricePerSeatMonthlyKobo: big(r.price_per_seat_monthly_kobo),
       healthStatus: r.health_status,
+      lastActivityDate: r.last_activity_date,
     }));
   }
 

@@ -1,3 +1,4 @@
+import { todayInLagos } from '../../common/calendar.js';
 import { parseNgnToKobo } from '../../common/money.js';
 import type { AppConfig } from '../../config/config.js';
 import type { HubSpotCompany } from '../../domain/types.js';
@@ -13,6 +14,7 @@ export type HubSpotPropertyMap = {
   arr: string;
   pricePerSeat: string;
   health: string;
+  lastActivity: string;
 };
 
 export function propertyMapFromConfig(cfg: AppConfig): HubSpotPropertyMap {
@@ -27,6 +29,7 @@ export function propertyMapFromConfig(cfg: AppConfig): HubSpotPropertyMap {
     arr: cfg.HS_PROP_ARR,
     pricePerSeat: cfg.HS_PROP_PRICE_PER_SEAT,
     health: cfg.HS_PROP_HEALTH,
+    lastActivity: cfg.HS_PROP_LAST_ACTIVITY,
   };
 }
 
@@ -48,12 +51,23 @@ function int(v: string | null | undefined): number | null {
   return Number.isInteger(n) && n >= 0 ? n : null;
 }
 
-/** HubSpot date properties arrive as 'YYYY-MM-DD' or as epoch milliseconds. */
+/**
+ * HubSpot date properties arrive as 'YYYY-MM-DD', epoch milliseconds, or an ISO
+ * timestamp. Date-only values are kept as-is; moments in time become WAT dates.
+ */
 function date(v: string | null | undefined): string | null {
   const t = text(v);
   if (t === null) return null;
-  if (/^\d{4}-\d{2}-\d{2}/.test(t)) return t.slice(0, 10);
-  if (/^\d+$/.test(t)) return new Date(Number(t)).toISOString().slice(0, 10);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(t)) return t;
+  if (/^\d{4}-\d{2}-\d{2}T/.test(t)) {
+    const d = new Date(t);
+    return Number.isNaN(d.getTime()) ? null : todayInLagos(d);
+  }
+  if (/^\d+$/.test(t)) {
+    // Date-only properties are midnight UTC; keep their calendar day.
+    const d = new Date(Number(t));
+    return d.getUTCHours() === 0 && d.getUTCMinutes() === 0 ? d.toISOString().slice(0, 10) : todayInLagos(d);
+  }
   return null;
 }
 
@@ -85,5 +99,6 @@ export function mapCompany(
     arrKobo: parseNgnToKobo(text(p[map.arr])),
     pricePerSeatMonthlyKobo: parseNgnToKobo(text(p[map.pricePerSeat])),
     healthStatus: text(p[map.health]),
+    lastActivityDate: date(p[map.lastActivity]),
   };
 }

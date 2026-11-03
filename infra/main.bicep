@@ -268,6 +268,8 @@ var jobs = [
   { name: 'daily', cron: '0 3 * * *', args: ['dist/cli.js', 'daily'], timeout: 3600 }
   // Retries failed alert deliveries during working hours (08:15–18:15 WAT, Mon–Fri).
   { name: 'dispatch', cron: '15 7-17 * * 1-5', args: ['dist/cli.js', 'dispatch'], timeout: 900 }
+  // US-16: escalate unacknowledged alerts at 08:00 WAT (07:00 UTC), Monday to Friday.
+  { name: 'escalate', cron: '0 7 * * 1-5', args: ['dist/cli.js', 'escalate'], timeout: 900 }
 ]
 
 resource scheduled 'Microsoft.App/jobs@2024-03-01' = [for j in jobs: {

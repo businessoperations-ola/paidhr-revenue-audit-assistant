@@ -17,7 +17,7 @@ function company(over: Partial<HubSpotCompany> = {}): HubSpotCompany {
   return {
     hubspotId: 'h1', name: 'Acme', domain: 'acme.example', controlPanelId: 'c1', csmName: 'Ada', csmEmail: 'ada@x.com',
     csmOwnerId: '9', industry: 'Tech', contractEndDate: '2027-01-31', seatTier: 'S', paidSeats: 10,
-    arrKobo: NGN(120_000), pricePerSeatMonthlyKobo: NGN(1_000), healthStatus: 'Healthy', ...over,
+    arrKobo: NGN(120_000), pricePerSeatMonthlyKobo: NGN(1_000), healthStatus: 'Healthy', lastActivityDate: '2026-11-01', ...over,
   };
 }
 
@@ -190,13 +190,16 @@ describe('US-24 late payroll', () => {
 });
 
 describe('fixture scenario', () => {
-  it('produces one example of every phase-1 flag type on 2026-11-03', () => {
+  it('produces one example of every flag type on 2026-11-03', () => {
     const { findings, reconciliation } = runAllAudits({
       companies: FIXTURE_COMPANIES,
       accounts: FIXTURE_ACCOUNTS,
       history: new Map(),
       today: '2026-11-03',
-      rules: { arr_tolerance_kobo: 1, payroll_grace_business_days: 2, mandatory_fields: ['CSM Name', 'Industry', 'Seat Tier', 'Control Panel ID'], seat_history_days: 400 },
+      rules: {
+        arr_tolerance_kobo: 1, payroll_grace_business_days: 2, mandatory_fields: ['CSM Name', 'Industry', 'Seat Tier', 'Control Panel ID'], seat_history_days: 400,
+        inactivity_days_by_health: { 'At Risk': 7, Neutral: 14, Healthy: 30, default: 14 }, escalation_business_days: 3, director_escalation_business_days: 2, escalate_severities: ['urgent', 'high'],
+      },
       calendar: new BusinessCalendar(),
       seatSource: 'hubspot_paid_seats',
     });
@@ -210,7 +213,11 @@ describe('fixture scenario', () => {
       'MISSING_FIELDS:Ibadan Clinics': 'low',
       'MISSING_FIELDS:Enugu Steel': 'low',
       'LATE_PAYROLL:Lekki Foods': 'urgent',
+      'ENGAGEMENT_DROUGHT:Kano Holdings Group': 'low',
+      'ENGAGEMENT_DROUGHT:Ibadan Clinics': 'high',
+      'ENGAGEMENT_DROUGHT:Enugu Steel': 'high',
     });
+    expect(findings).toHaveLength(11);
     expect(reconciliation).toMatchObject({ matched: 3, hubspotOnly: 1, brokenLinks: 1, controlPanelOnly: 1 });
   });
 });

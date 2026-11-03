@@ -42,6 +42,9 @@ describe('phase-1 daily pipeline against Postgres', () => {
     expect(await openFlags()).toEqual([
       'ARR_MISMATCH:Lekki Foods',
       'BROKEN_LINK:Enugu Steel',
+      'ENGAGEMENT_DROUGHT:Enugu Steel',
+      'ENGAGEMENT_DROUGHT:Ibadan Clinics',
+      'ENGAGEMENT_DROUGHT:Kano Holdings Group',
       'LATE_PAYROLL:Lekki Foods',
       'MISSING_FIELDS:Enugu Steel',
       'MISSING_FIELDS:Ibadan Clinics',
@@ -66,6 +69,9 @@ describe('phase-1 daily pipeline against Postgres', () => {
     expect(fallback).toHaveLength(1);
     expect(fallback[0]!.text).toContain('Port Harcourt Marine');
     expect(fallback[0]!.text).toContain('Enugu Steel');
+    // The email only promises escalation because these flags really do escalate (phase 1 fix).
+    expect(ngozi.find((e) => e.subject.startsWith('URGENT'))!.text).toContain('Monthly payroll expected 2026-10-28');
+    expect(ngozi.find((e) => e.subject.startsWith('URGENT'))!.text).toContain('within 3 business days, they go to your team lead');
     // Acknowledge links are signed and point at the API.
     expect(ngozi[0]!.text).toMatch(/https:\/\/audit\.example\.com\/ack\/\d+\?sig=[\w-]{32}/);
 
@@ -73,8 +79,8 @@ describe('phase-1 daily pipeline against Postgres', () => {
     expect(outbox.chats).toHaveLength(4);
     expect(outbox.chats.some((c) => c.text.startsWith('🚨 *Urgent'))).toBe(true);
 
-    // US-15: one HubSpot task per flag that has a HubSpot company (7 of 8), urgent = HIGH, owner = CSM.
-    expect(outbox.tasks).toHaveLength(7);
+    // US-15: one HubSpot task per flag that has a HubSpot company (10 of 11), urgent = HIGH, owner = CSM.
+    expect(outbox.tasks).toHaveLength(10);
     const payrollTask = outbox.tasks.find((t) => t.subject.includes('Payroll run is late'))!;
     expect(payrollTask).toMatchObject({ companyId: '1002', ownerId: '501', priority: 'HIGH' });
 
@@ -120,7 +126,7 @@ describe('phase-1 daily pipeline against Postgres', () => {
     const emailsAfterFirst = outbox.emails.length;
 
     const { rows } = await db.query(`SELECT status, count(*)::int AS n FROM alert WHERE channel = 'google_chat' GROUP BY status`);
-    expect(rows).toEqual([{ status: 'failed', n: 8 }]);
+    expect(rows).toEqual([{ status: 'failed', n: 11 }]);
 
     outbox.failChatTimes = 0;
     await jobs.run('dispatch', '2026-11-03');

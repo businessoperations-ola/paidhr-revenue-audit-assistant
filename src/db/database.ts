@@ -2,13 +2,17 @@ import { Inject, Injectable, type OnApplicationShutdown } from '@nestjs/common';
 import pg from 'pg';
 import { APP_CONFIG, type AppConfig } from '../config/config.js';
 import { migration001 } from './migrations/001_init.js';
+import { migration002 } from './migrations/002_engagement_escalation.js';
 
 // Return bigint columns as strings (we convert to BigInt explicitly) and dates as 'YYYY-MM-DD'.
 pg.types.setTypeParser(pg.types.builtins.DATE, (v: string) => v);
 
 export type Queryable = Pick<pg.PoolClient, 'query'>;
 
-const MIGRATIONS: Array<{ version: string; sql: string }> = [{ version: '001_init', sql: migration001 }];
+const MIGRATIONS: Array<{ version: string; sql: string }> = [
+  { version: '001_init', sql: migration001 },
+  { version: '002_engagement_escalation', sql: migration002 },
+];
 
 @Injectable()
 export class Database implements OnApplicationShutdown {

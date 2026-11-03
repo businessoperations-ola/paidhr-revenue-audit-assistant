@@ -18,6 +18,10 @@ export interface StoredFlag {
   firstSeenAt: string;
   acknowledgedAt: string | null;
   acknowledgedBy: string | null;
+  notifiedAt: string | null;
+  escalationLevel: number;
+  escalatedAt: string | null;
+  escalatedOn: string | null;
 }
 
 export interface AiRationale {
@@ -28,6 +32,8 @@ export interface AiRationale {
 }
 
 const SEVERITY_ORDER = `CASE severity WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END`;
+
+const iso = (v: unknown): string | null => (v instanceof Date ? v.toISOString() : ((v as string | null) ?? null));
 
 function toFlag(r: Record<string, any>): StoredFlag {
   return {
@@ -46,6 +52,10 @@ function toFlag(r: Record<string, any>): StoredFlag {
     firstSeenAt: r.first_seen_at instanceof Date ? r.first_seen_at.toISOString() : r.first_seen_at,
     acknowledgedAt: r.acknowledged_at instanceof Date ? r.acknowledged_at.toISOString() : r.acknowledged_at,
     acknowledgedBy: r.acknowledged_by,
+    notifiedAt: iso(r.notified_at),
+    escalationLevel: r.escalation_level ?? 0,
+    escalatedAt: iso(r.escalated_at),
+    escalatedOn: r.escalated_on ?? null,
   };
 }
 
@@ -105,12 +115,13 @@ export class FlagRepository {
     return rows[0] ? toFlag(rows[0]) : null;
   }
 
-  async list(filter: { status?: string; csmEmail?: string; type?: string; limit?: number }): Promise<StoredFlag[]> {
+  async list(filter: { status?: string; csmEmail?: string; type?: string; escalated?: boolean; limit?: number }): Promise<StoredFlag[]> {
     const where: string[] = [];
     const params: unknown[] = [];
     if (filter.status) where.push(`status = $${params.push(filter.status)}`);
     if (filter.csmEmail) where.push(`csm_email = $${params.push(filter.csmEmail.toLowerCase())}`);
     if (filter.type) where.push(`type = $${params.push(filter.type)}`);
+    if (filter.escalated) where.push('escalation_level > 0');
     const limit = Math.min(Math.max(filter.limit ?? 200, 1), 1000);
     const { rows } = await this.db.query(
       `SELECT * FROM audit_flag ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
@@ -132,12 +143,22 @@ export class FlagRepository {
             SELECT 1 FROM unnest($1::text[]) AS ch(name)
              WHERE NOT EXISTS (
                SELECT 1 FROM alert a
-                WHERE a.flag_id = f.id AND a.channel = ch.name
+                WHERE a.flag_id = f.id AND a.channel = ch.name AND a.kind = 'notify'
                   AND (a.status IN ('sent', 'skipped') OR a.attempts >= $2)
              )
           )
         ORDER BY ${SEVERITY_ORDER}, f.id`,
       [channels, maxAttempts],
+    );
+    return rows.map(toFlag);
+  }
+
+  /** Open flags that were delivered to the CSM and have not reached the directors yet. */
+  async listEscalationCandidates(): Promise<StoredFlag[]> {
+    const { rows } = await this.db.query(
+      `SELECT * FROM audit_flag
+        WHERE status = 'open' AND notified_at IS NOT NULL AND escalation_level < 2
+        ORDER BY ${SEVERITY_ORDER}, id`,
     );
     return rows.map(toFlag);
   }
