@@ -50,6 +50,11 @@ const schema = z.object({
   HS_PROP_HEALTH: z.string().default('health_status'),
   // HubSpot's built-in "Last contacted": last logged call, meeting or email (US-14).
   HS_PROP_LAST_ACTIVITY: z.string().default('notes_last_contacted'),
+  // Phase 4: where client broadcasts are sent (one or more addresses, separated by commas).
+  HS_PROP_PRIMARY_CONTACT_EMAIL: z.string().default('primary_contact_email'),
+  // HubSpot support-pipeline stage ids that mean "closed" (default pipeline: 4). Blank = use closed date.
+  HS_TICKET_CLOSED_STAGE_IDS: z.string().default('4'),
+  HS_TICKET_LOOKBACK_DAYS: z.coerce.number().default(120),
   // Only companies in this lifecycle stage are audited.
   HS_CUSTOMER_LIFECYCLE_STAGE: z.string().default('customer'),
 
@@ -79,8 +84,19 @@ const schema = z.object({
   GOOGLE_WORKSPACE_DOMAIN: z.string().optional(),
   AUTH_DISABLED: bool, // local development only
 
+  // Admin broadcasts (phase 4). Nothing is sent to anyone until this is true.
+  BROADCASTS_LIVE: bool,
+  BROADCAST_MAX_RECIPIENTS: z.coerce.number().default(200),
+  BROADCAST_SEND_DELAY_MS: z.coerce.number().default(250),
+  // When true, broadcast managers must also be admins in the Control Panel (US-20).
+  BROADCAST_REQUIRE_CP_ADMIN: bool,
+
   // Claude write-ups on alerts (optional in phase 1).
   AI_RATIONALE_ENABLED: bool,
+  // Master switch for the phase 4 Claude features: onboarding playbooks, QBR drafts,
+  // ticket clustering and ticket sentiment.
+  AI_FEATURES_ENABLED: bool,
+  AI_MAX_ITEMS_PER_RUN: z.coerce.number().default(100),
   CLAUDE_PROVIDER: z.enum(['anthropic', 'foundry']).default('foundry'),
   CLAUDE_MODEL: z.string().default('claude-opus-5-5'),
   AI_MAX_RATIONALES_PER_RUN: z.coerce.number().default(200),

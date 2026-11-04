@@ -12,11 +12,13 @@ export const FLAG_TITLES: Record<FlagType, string> = {
   MISSING_FIELDS: 'Missing HubSpot fields',
   LATE_PAYROLL: 'Payroll run is late',
   ENGAGEMENT_DROUGHT: 'No contact within the limit',
+  ONBOARDING_STAGNATION: 'Onboarding stalled: payroll not set up',
+  SUPPORT_ESCALATION_RISK: 'Support issue at risk of escalating',
 };
 
 export type AckUrlFn = (flagId: number) => string;
 
-function escapeHtml(s: string): string {
+export function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 }
 
@@ -221,7 +223,7 @@ export function escalationChat(route: EscalationRoute, csm: string | null, items
 
 /* ---------- Branded HTML email (PaidHR colours; tables and inline styles for email clients) ---------- */
 
-const BRAND = {
+export const BRAND = {
   blue: '#004AF5',
   navy: '#012B86',
   navInk: '#0B2D74',

@@ -14,6 +14,13 @@ const RulesSchema = z.object({
   escalation_business_days: z.coerce.number().int().min(1).max(30),
   director_escalation_business_days: z.coerce.number().int().min(1).max(30),
   escalate_severities: z.array(z.enum(['urgent', 'high', 'medium', 'low'])),
+  onboarding_sla_days: z.coerce.number().int().min(1).max(180),
+  radar_seat_growth_pct: z.coerce.number().min(1).max(1000),
+  radar_seat_growth_days: z.coerce.number().int().min(7).max(365),
+  radar_ewa_volume_kobo: z.coerce.number().int().min(0),
+  radar_contractor_min: z.coerce.number().int().min(1).max(10000),
+  support_reopen_threshold: z.coerce.number().int().min(1).max(20),
+  support_open_days: z.coerce.number().int().min(1).max(90),
 });
 
 export type AuditRules = z.infer<typeof RulesSchema>;

@@ -44,6 +44,12 @@ param alertsLive bool = false
 @description('Turn on Claude write-ups on alerts.')
 param aiRationaleEnabled bool = false
 
+@description('Claude features: onboarding playbooks, ticket themes, QBR drafts, tone scoring. Needs the Foundry settings below.')
+param aiFeaturesEnabled bool = false
+
+@description('When false, admin broadcasts are a dry run: recorded but nothing is sent.')
+param broadcastsLive bool = false
+
 @description('Microsoft Foundry resource name hosting Claude (only used when aiRationaleEnabled).')
 param foundryResource string = ''
 
@@ -227,6 +233,8 @@ var envVars = [
   { name: 'GOOGLE_OAUTH_CLIENT_ID', value: googleOAuthClientId }
   { name: 'GOOGLE_WORKSPACE_DOMAIN', value: googleWorkspaceDomain }
   { name: 'AI_RATIONALE_ENABLED', value: aiRationaleEnabled ? 'true' : 'false' }
+  { name: 'AI_FEATURES_ENABLED', value: aiFeaturesEnabled ? 'true' : 'false' }
+  { name: 'BROADCASTS_LIVE', value: broadcastsLive ? 'true' : 'false' }
   { name: 'CLAUDE_PROVIDER', value: 'foundry' }
   { name: 'ANTHROPIC_FOUNDRY_API_KEY', secretRef: 'foundry-api-key' }
   { name: 'ANTHROPIC_FOUNDRY_RESOURCE', value: foundryResource }
@@ -272,6 +280,14 @@ var jobs = [
   { name: 'dispatch', cron: '15 7-17 * * 1-5', args: ['dist/cli.js', 'dispatch'], timeout: 900 }
   // US-16: escalate unacknowledged alerts at 08:00 WAT (07:00 UTC), Monday to Friday.
   { name: 'escalate', cron: '0 7 * * 1-5', args: ['dist/cli.js', 'escalate'], timeout: 900 }
+  // US-25: scheduled reports at 08:00 WAT. Which ones go out is set in the app (Reports > Schedules).
+  { name: 'reports', cron: '0 7 * * *', args: ['dist/cli.js', 'reports'], timeout: 900 }
+  // US-22: sends scheduled broadcasts that are due, and resumes any run that stopped halfway.
+  { name: 'broadcasts', cron: '*/15 * * * *', args: ['dist/cli.js', 'broadcasts'], timeout: 900 }
+  // US-18: locks each CSM's ARR on 1 January (01:00 WAT).
+  { name: 'baseline', cron: '0 0 1 1 *', args: ['dist/cli.js', 'baseline'], timeout: 900 }
+  // US-28: ticket themes every Monday at 06:00 WAT (skipped while Claude features are off).
+  { name: 'cx-weekly', cron: '0 5 * * 1', args: ['dist/cli.js', 'cx-weekly'], timeout: 1800 }
 ]
 
 resource scheduled 'Microsoft.App/jobs@2024-03-01' = [for j in jobs: {

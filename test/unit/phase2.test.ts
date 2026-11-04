@@ -16,7 +16,7 @@ function company(over: Partial<HubSpotCompany> = {}): HubSpotCompany {
   return {
     hubspotId: 'h1', name: 'Acme', domain: null, controlPanelId: 'c1', csmName: 'Ada', csmEmail: 'ada@x.com', csmOwnerId: '9',
     industry: 'Tech', contractEndDate: null, seatTier: 'S', paidSeats: 10, arrKobo: 1n, pricePerSeatMonthlyKobo: 1n,
-    healthStatus: 'Neutral', lastActivityDate: '2026-11-01', ...over,
+    healthStatus: 'Neutral', lastActivityDate: '2026-11-01', primaryContactEmail: null, ...over,
   };
 }
 
@@ -57,7 +57,7 @@ describe('US-13 / US-14 engagement drought', () => {
 describe('phase-1 wording fixes', () => {
   it('capitalises the late-payroll summary', () => {
     const [f] = auditLatePayroll(
-      [{ clientId: 'c', parentClientId: null, name: 'A', isActive: true, activeUsers: 1, contractorUsers: 0, payFrequency: 'SEMI_MONTHLY', payDay: null, lastPayrollPayDate: '2026-10-15', lastPayrollCompletedAt: null }],
+      [{ clientId: 'c', parentClientId: null, name: 'A', isActive: true, activeUsers: 1, contractorUsers: 0, payFrequency: 'SEMI_MONTHLY', payDay: null, lastPayrollPayDate: '2026-10-15', lastPayrollCompletedAt: null, createdOn: null, payrollConfiguredOn: null, firstPayrollRunOn: null, ewaLastUsedOn: null, ewaVolume30dKobo: null, statutoryLastUsedOn: null, }],
       { today: '2026-11-10', calendar: new BusinessCalendar(), graceBusinessDays: 2, companyFor: () => undefined },
     );
     expect(f?.summary.startsWith('Semi-monthly payroll expected 2026-10-31')).toBe(true);

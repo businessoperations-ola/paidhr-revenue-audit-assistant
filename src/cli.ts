@@ -13,6 +13,10 @@ const USAGE = `Usage: node dist/cli.js <migrate|${JOB_NAMES.join('|')}> [--date 
   audit     run phase-1 audits on that snapshot
   dispatch  send undelivered alerts (also retries failures)
   escalate  send unacknowledged alerts to team leads, then directors (US-16)
+  reports   send the daily/weekly/monthly reports that are due (US-25)
+  broadcasts  send admin broadcasts that are due, and resume interrupted ones (US-22)
+  baseline  lock each CSM's ARR for the year (run on 1 January, US-18)
+  cx-weekly cluster the last 30 days of tickets into themes with draft macros (US-28)
   team      set a CSM's team lead: team <csm-email> <lead-email>
   daily     ingest, audit, dispatch (the 04:00 WAT scheduled job)
   grant     grant API access: grant <email> <role>`;

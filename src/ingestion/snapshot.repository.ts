@@ -1,7 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { IsoDate } from '../common/calendar.js';
 import { Database, type Queryable } from '../db/database.js';
-import type { CompanyDayPoint, ControlPanelAccount, HubSpotCompany, PayFrequency } from '../domain/types.js';
+import type { SupportTicket } from '../cx/cx-rules.js';
+import type { CompanyDayPoint, ControlPanelAccount, HubSpotCompany, PayFrequency, RevenueLine, Ticket } from '../domain/types.js';
 
 const big = (v: string | null): bigint | null => (v === null ? null : BigInt(v));
 
@@ -24,11 +25,12 @@ export class SnapshotRepository {
     if (companies.length > 0) {
       await client.query(
         `INSERT INTO hs_company_snapshot (snapshot_date, hubspot_id, name, domain, control_panel_id, csm_name, csm_email,
-            csm_owner_id, industry, contract_end_date, seat_tier, paid_seats, arr_kobo, price_per_seat_monthly_kobo, health_status, last_activity_date)
+            csm_owner_id, industry, contract_end_date, seat_tier, paid_seats, arr_kobo, price_per_seat_monthly_kobo, health_status, last_activity_date, primary_contact_email)
          SELECT $1::date, * FROM jsonb_to_recordset($2::jsonb) AS x(
             hubspot_id text, name text, domain text, control_panel_id text, csm_name text, csm_email text,
             csm_owner_id text, industry text, contract_end_date date, seat_tier text, paid_seats int,
-            arr_kobo bigint, price_per_seat_monthly_kobo bigint, health_status text, last_activity_date date)`,
+            arr_kobo bigint, price_per_seat_monthly_kobo bigint, health_status text, last_activity_date date,
+            primary_contact_email text)`,
         [
           date,
           JSON.stringify(
@@ -48,6 +50,7 @@ export class SnapshotRepository {
               price_per_seat_monthly_kobo: c.pricePerSeatMonthlyKobo?.toString() ?? null,
               health_status: c.healthStatus,
               last_activity_date: c.lastActivityDate,
+              primary_contact_email: c.primaryContactEmail,
             })),
           ),
         ],
@@ -57,10 +60,13 @@ export class SnapshotRepository {
     if (accounts.length > 0) {
       await client.query(
         `INSERT INTO cp_account_snapshot (snapshot_date, client_id, parent_client_id, name, is_active, active_users,
-            contractor_users, pay_frequency, pay_day, last_payroll_pay_date, last_payroll_completed_at)
+            contractor_users, pay_frequency, pay_day, last_payroll_pay_date, last_payroll_completed_at,
+            created_on, payroll_configured_on, first_payroll_run_on, ewa_last_used_on, ewa_volume_30d_kobo, statutory_last_used_on)
          SELECT $1::date, * FROM jsonb_to_recordset($2::jsonb) AS x(
             client_id text, parent_client_id text, name text, is_active boolean, active_users int, contractor_users int,
-            pay_frequency text, pay_day int, last_payroll_pay_date date, last_payroll_completed_at timestamptz)`,
+            pay_frequency text, pay_day int, last_payroll_pay_date date, last_payroll_completed_at timestamptz,
+            created_on date, payroll_configured_on date, first_payroll_run_on date, ewa_last_used_on date,
+            ewa_volume_30d_kobo bigint, statutory_last_used_on date)`,
         [
           date,
           JSON.stringify(
@@ -75,6 +81,12 @@ export class SnapshotRepository {
               pay_day: a.payDay,
               last_payroll_pay_date: a.lastPayrollPayDate,
               last_payroll_completed_at: a.lastPayrollCompletedAt,
+              created_on: a.createdOn,
+              payroll_configured_on: a.payrollConfiguredOn,
+              first_payroll_run_on: a.firstPayrollRunOn,
+              ewa_last_used_on: a.ewaLastUsedOn,
+              ewa_volume_30d_kobo: a.ewaVolume30dKobo?.toString() ?? null,
+              statutory_last_used_on: a.statutoryLastUsedOn,
             })),
           ),
         ],
@@ -131,6 +143,7 @@ export class SnapshotRepository {
       pricePerSeatMonthlyKobo: big(r.price_per_seat_monthly_kobo),
       healthStatus: r.health_status,
       lastActivityDate: r.last_activity_date,
+      primaryContactEmail: r.primary_contact_email ?? null,
     }));
   }
 
@@ -151,6 +164,12 @@ export class SnapshotRepository {
       payDay: r.pay_day,
       lastPayrollPayDate: r.last_payroll_pay_date,
       lastPayrollCompletedAt: r.completed_iso,
+      createdOn: r.created_on ?? null,
+      payrollConfiguredOn: r.payroll_configured_on ?? null,
+      firstPayrollRunOn: r.first_payroll_run_on ?? null,
+      ewaLastUsedOn: r.ewa_last_used_on ?? null,
+      ewaVolume30dKobo: big(r.ewa_volume_30d_kobo ?? null),
+      statutoryLastUsedOn: r.statutory_last_used_on ?? null,
     }));
   }
 
@@ -175,5 +194,66 @@ export class SnapshotRepository {
       history.set(r.hubspot_id, list);
     }
     return history;
+  }
+
+  /** Insert or update tickets. A ticket that was closed and is open again counts as a re-open. */
+  async upsertTickets(tickets: Ticket[]): Promise<number> {
+    if (tickets.length === 0) return 0;
+    await this.db.query(
+      `INSERT INTO ticket (ticket_id, hubspot_company_id, subject, content, priority, created_at, closed_at, is_closed)
+       SELECT * FROM jsonb_to_recordset($1::jsonb) AS x(
+         ticket_id text, hubspot_company_id text, subject text, content text, priority text,
+         created_at timestamptz, closed_at timestamptz, is_closed boolean)
+       ON CONFLICT (ticket_id) DO UPDATE SET
+         hubspot_company_id = EXCLUDED.hubspot_company_id, subject = EXCLUDED.subject, content = EXCLUDED.content,
+         priority = EXCLUDED.priority, closed_at = EXCLUDED.closed_at, is_closed = EXCLUDED.is_closed,
+         reopen_count = ticket.reopen_count + CASE WHEN ticket.is_closed AND NOT EXCLUDED.is_closed THEN 1 ELSE 0 END,
+         last_seen_at = now()`,
+      [
+        JSON.stringify(
+          tickets.map((t) => ({
+            ticket_id: t.ticketId, hubspot_company_id: t.hubspotCompanyId, subject: t.subject, content: t.content,
+            priority: t.priority, created_at: t.createdAt, closed_at: t.closedAt, is_closed: t.isClosed,
+          })),
+        ),
+      ],
+    );
+    return tickets.length;
+  }
+
+  async ticketCount(): Promise<number> {
+    const { rows } = await this.db.query<{ n: string }>('SELECT count(*) AS n FROM ticket');
+    return Number(rows[0]!.n);
+  }
+
+  /** Replace all expansion revenue lines (the source gives the full recent window each time). */
+  async replaceRevenueLines(lines: RevenueLine[]): Promise<number> {
+    await this.db.transaction(async (client) => {
+      await client.query('DELETE FROM cp_revenue_line');
+      if (lines.length > 0) {
+        await client.query(
+          `INSERT INTO cp_revenue_line (revenue_date, client_id, category, amount_kobo)
+           SELECT * FROM jsonb_to_recordset($1::jsonb) AS x(revenue_date date, client_id text, category text, amount_kobo bigint)`,
+          [JSON.stringify(lines.map((l) => ({ revenue_date: l.revenueDate, client_id: l.clientId, category: l.category, amount_kobo: l.amountKobo.toString() })))],
+        );
+      }
+    });
+    return lines.length;
+  }
+
+  /** Open tickets, for the support early warning. */
+  async loadOpenTickets(): Promise<SupportTicket[]> {
+    const { rows } = await this.db.query(
+      `SELECT ticket_id, hubspot_company_id, subject, created_at, is_closed, reopen_count, sentiment FROM ticket WHERE NOT is_closed`,
+    );
+    return rows.map((r) => ({
+      ticketId: r.ticket_id,
+      hubspotCompanyId: r.hubspot_company_id,
+      subject: r.subject,
+      createdAt: r.created_at instanceof Date ? r.created_at.toISOString() : r.created_at,
+      isClosed: r.is_closed,
+      reopenCount: r.reopen_count,
+      sentiment: r.sentiment,
+    }));
   }
 }
