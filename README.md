@@ -1,4 +1,6 @@
-# Revenue & Data Audit Assistant
+# Oyela
+
+*Oyela* is Yoruba for "bring forth" or "bring to light": it brings PaidHR's revenue, payroll and customer data to light for the CX team.
 
 Every morning at 04:00 WAT this service snapshots HubSpot and the Control Panel, checks billing and payroll, and alerts the right CSM in Google Chat, Gmail and HubSpot before the CX team starts work.
 
@@ -41,7 +43,11 @@ API (Container App, Google sign-in)
 - **Phase 3: numbers for leadership.** ARR bridge (new, expansion, contraction, churn), renewals, module adoption, contractor seats, health mix, ticket volume and each CSM's ARR against their 1 January baseline. All computed in code from daily snapshots. Contracts that expire after the last snapshot and have not renewed are left out of the renewal rate rather than counted as lost. Reports (Leadership, CSM, Implementation, Support) are scheduled in the app under Reports and sent by the `reports` job at 08:00 Lagos time.
 - **Phase 4: Claude CX tools (off by default).** With `AI_FEATURES_ENABLED=true`: onboarding playbooks on stalled accounts, ticket themes with draft macros and KB outlines, QBR drafts, and tone scoring that feeds a support early warning. Ticket text is redacted before storage and before it reaches Claude, and every answer is checked in code (real ticket ids only, size limits). Without it, the expansion radar, the 90-day scorecard and the reopened-ticket warning still work.
 - **Admin broadcasts.** Super admins and CS Directors can write to CSMs, the CX team and (super admins only) clients, now or on a schedule. Safe by default: `BROADCASTS_LIVE=false` is a dry run, the send must confirm the previewed count, there is a recipient cap, text is a safe subset (no HTML), clients get email only, and each client email is logged as a HubSpot note.
-- **Portal access.** One sign-in page with Staff and Admin entries (Google Workspace only). Staff see Workspace tools their role allows. Super admins and CS Directors also get an Administration area: rules, team leads, reconciliation, broadcasts and a Users screen to add people, change roles and deactivate them. This is a portal for PaidHR's own CX team, not a multi-tenant product.
+- **One sign-in, role-based views.** Everyone signs in the same way (Google Workspace). Their role decides what they see: a Workspace area for everyone, plus an Administration area for super admins and CS Directors (rules, team leads, reconciliation, broadcasts, users).
+- **Organogram.** Each person can report to a Team Lead, CS Director or super admin (Users screen; CSM to team lead links on the Team leads screen count too). Everyone sees their own work and everyone under them: alerts, the dashboard, expansion radar and reports. Directors, viewers and super admins see everyone. Team leads are emailed a team report with a row per CSM.
+- **CSM dashboard.** Every client in your scope with ARR, health, renewal countdown, seats in use against paid, last contact, payroll status, open alerts and tickets, with a detail panel per client (usage trend, adoption, alerts, tickets, expansion revenue, QBR draft).
+- **View as.** A super admin can switch to see Oyela as any user (director, team lead, CSM and so on). It is read-only and each switch is logged.
+This is a portal for PaidHR's own CX team, not a multi-tenant product.
 
 ## Run it locally
 

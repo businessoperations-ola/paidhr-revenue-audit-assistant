@@ -4,12 +4,30 @@
  * textContent (via el()), never innerHTML. No backticks in here: this is embedded in a template.
  */
 export const INSIGHTS_HTML = /* html */ `
+  <section id="view-dashboard" hidden>
+    <div class="bar" style="margin-bottom:12px">
+      <h2 id="db-title" style="margin-right:auto">My portfolio</h2>
+      <label class="small" id="db-who-wrap">Show <select id="db-who"></select></label>
+      <label class="small">Sort <select id="db-sort"><option value="attention">Needs attention first</option><option value="arr">Largest ARR</option><option value="renewal">Renewal soonest</option><option value="health">Health</option><option value="name">Name</option></select></label>
+      <input id="db-search" type="search" placeholder="Search clients" aria-label="Search clients">
+    </div>
+    <p class="muted small" id="db-asof"></p>
+    <div class="grid2" id="db-kpis" style="margin:12px 0"></div>
+    <div id="db-team-wrap" hidden>
+      <h3 style="margin:16px 0 8px;font-size:16px">By CSM</h3>
+      <div class="card table-wrap"><table style="min-width:640px"><thead><tr><th>CSM</th><th>Clients</th><th>ARR</th><th>At Risk</th><th>Renewals in 90 days</th><th>Open alerts</th></tr></thead><tbody id="db-team"></tbody></table></div>
+    </div>
+    <h3 style="margin:20px 0 8px;font-size:16px">Clients</h3>
+    <div class="card table-wrap"><table style="min-width:980px"><thead><tr><th>Client</th><th>Health</th><th>ARR</th><th>Renewal</th><th>Seats in use</th><th>Last contact</th><th>Payroll</th><th>Alerts</th><th>Tickets</th></tr></thead><tbody id="db-clients"></tbody></table></div>
+    <div class="card detail" id="db-detail" hidden style="margin-top:16px"></div>
+  </section>
+
   <section id="view-reports" hidden>
     <div class="bar" style="margin-bottom:12px">
       <h2 style="margin-right:auto">Reports</h2>
       <label class="small">Report <select id="rp-audience"></select></label>
       <label class="small">Period <select id="rp-cadence"><option value="daily">Daily</option><option value="weekly" selected>Weekly</option><option value="monthly">Monthly</option></select></label>
-      <input id="rp-csm" type="email" placeholder="CSM email" aria-label="CSM email" hidden>
+      <label class="small" id="rp-who-wrap" hidden>Whose <select id="rp-who"></select></label>
       <button class="btn primary" id="rp-go">Show</button>
     </div>
     <div id="rp-body" class="grid2"></div>
@@ -47,7 +65,7 @@ export const INSIGHTS_HTML = /* html */ `
       <select id="us-role" aria-label="Role"></select>
       <button class="btn primary" type="submit">Add user</button>
     </form>
-    <div class="card table-wrap"><table><thead><tr><th>User</th><th>Role</th><th>Status</th><th>Last seen</th><th></th></tr></thead><tbody id="us-rows"></tbody></table></div>
+    <div class="card table-wrap"><table><thead><tr><th>User</th><th>Role</th><th>Reports to</th><th>Status</th><th>Last seen</th><th></th></tr></thead><tbody id="us-rows"></tbody></table></div>
   </section>
 
   <section id="view-broadcasts" hidden>
@@ -86,7 +104,7 @@ export const INSIGHTS_HTML = /* html */ `
 `;
 
 export const INSIGHTS_JS = String.raw`
-const ALL_VIEWS = ['alerts', 'rules', 'teams', 'recon', 'reports', 'cx', 'support', 'broadcasts', 'users'];
+const ALL_VIEWS = ['dashboard', 'alerts', 'rules', 'teams', 'recon', 'reports', 'cx', 'support', 'broadcasts', 'users'];
 const AUDIENCE_LABELS = { executive: 'Leadership', csm: 'CSM portfolio', implementation: 'Implementation', support: 'Support' };
 const ROLE_AUDIENCES = { csm: ['csm'], implementation_manager: ['implementation'], support_specialist: ['support'] };
 const money = (kobo) => '₦' + (Number(BigInt(kobo) / 100n)).toLocaleString('en-NG');
@@ -116,13 +134,17 @@ function drawSection(s) {
 }
 async function loadReports() {
   const sel = $('rp-audience');
-  if (!sel.options.length) {
-    const allowed = ROLE_AUDIENCES[state.me.role] || Object.keys(AUDIENCE_LABELS);
-    for (const a of allowed) sel.append(el('option', { value: a }, AUDIENCE_LABELS[a]));
-    sel.addEventListener('change', () => { $('rp-csm').hidden = !(sel.value === 'csm' && state.me.role !== 'csm'); });
+  const allowed = ROLE_AUDIENCES[state.me.role] || Object.keys(AUDIENCE_LABELS);
+  sel.replaceChildren(...allowed.map((a) => el('option', { value: a }, AUDIENCE_LABELS[a])));
+  if (!sel.dataset.wired) {
+    sel.dataset.wired = '1';
+    sel.addEventListener('change', syncWho);
     $('rp-go').addEventListener('click', () => showReport().catch((e) => notice(e.message, true)));
-    $('rp-csm').hidden = !(sel.value === 'csm' && state.me.role !== 'csm');
   }
+  const people = await api('/portfolio/people').catch(() => []);
+  state.people = people;
+  $('rp-audience').options[0] && (sel.value = allowed[0]);
+  syncWho();
   await showReport();
   if (['csm', 'implementation_manager', 'support_specialist'].includes(state.me.role)) { $('rp-sched').closest('div').hidden = true; return; }
   const rows = await api('/reports/schedules');
@@ -130,9 +152,18 @@ async function loadReports() {
   $('rp-sched').replaceChildren(...rows.map((r) => el('tr', { style: 'cursor:default' }, el('td', {}, AUDIENCE_LABELS[r.audience]), el('td', {}, names[r.cadence]), el('td', { class: 'small muted' }, r.channels.join(', ')),
     el('td', {}, el('input', { type: 'checkbox', checked: r.enabled, disabled: state.me.role !== 'cs_director', 'aria-label': 'Send ' + r.key, onchange: async (e) => { try { await api('/reports/schedules/' + r.key, { method: 'PUT', body: JSON.stringify({ enabled: e.target.checked }) }); notice('Saved'); } catch (err) { e.target.checked = !e.target.checked; notice(err.message, true); } } })))));
 }
+function syncWho() {
+  const people = state.people || [];
+  const show = $('rp-audience').value === 'csm' && (people.length > 1 || state.me.role !== 'csm');
+  $('rp-who-wrap').hidden = !show;
+  if (show) {
+    const label = state.me.role === 'cs_director' || state.me.role === 'super_admin' || state.me.role === 'viewer' ? 'Everyone (team report)' : 'My whole team';
+    $('rp-who').replaceChildren(el('option', { value: '' }, label), ...people.map((p) => el('option', { value: p.email }, (p.name || p.email) + (p.email === state.me.email ? ' (me)' : ''))));
+  }
+}
 async function showReport() {
   const q = new URLSearchParams({ audience: $('rp-audience').value, cadence: $('rp-cadence').value });
-  if ($('rp-audience').value === 'csm' && state.me.role !== 'csm') { if (!$('rp-csm').value) { $('rp-body').replaceChildren(el('p', { class: 'muted' }, 'Enter a CSM email to see their report.')); return; } q.set('csm', $('rp-csm').value.trim()); }
+  if ($('rp-audience').value === 'csm' && !$('rp-who-wrap').hidden && $('rp-who').value) q.set('csm', $('rp-who').value);
   let r;
   try { r = await api('/reports/preview?' + q); } catch (e) { $('rp-body').replaceChildren(el('p', { class: 'muted' }, e.message)); return; }
   $('rp-body').replaceChildren(el('div', { style: 'grid-column:1/-1' }, el('h3', { style: 'margin:0' }, r.title), el('span', { class: 'small muted' }, r.subtitle)), ...r.sections.map(drawSection));
@@ -157,8 +188,8 @@ async function loadCx() {
     $('cx-score-rows').replaceChildren(...s.rows.map((r) => el('tr', { style: 'cursor:default' }, el('td', {}, el('strong', {}, r.name)), el('td', {}, fmtDate(r.createdOn)), el('td', {}, r.daysSinceSignup), el('td', {}, fmtDate(r.configuredOn)), el('td', {}, fmtDate(r.firstPayrollRunOn)), el('td', {}, r.ttfvDays == null ? '–' : r.ttfvDays), el('td', {}, el('span', { class: 'chip ' + (String(r.status).includes('STAGNAT') ? 'high' : 'low') }, String(r.status).toLowerCase().replace(/_/g, ' '))))));
   } catch (e) { $('cx-score').replaceChildren(el('p', { class: 'muted' }, e.message)); $('cx-score-rows').replaceChildren(); }
 }
-async function openQbr(entry) {
-  const box = $('cx-qbr'); box.hidden = false; box.replaceChildren(el('p', { class: 'muted' }, 'Drafting the QBR for ' + entry.name + '...'));
+async function openQbr(entry, boxId) {
+  const box = $(boxId || 'cx-qbr'); box.hidden = false; box.replaceChildren(el('p', { class: 'muted' }, 'Drafting the QBR for ' + entry.name + '...'));
   try {
     const out = await api('/cx/accounts/' + encodeURIComponent(entry.hubspotId) + '/qbr', { method: 'POST' });
     const q = out.content;
@@ -294,11 +325,128 @@ async function loadUsers() {
     const self = u.email === state.me.email;
     const locked = u.role === 'super_admin' && state.me.role !== 'super_admin';
     const sel = el('select', { 'aria-label': 'Role for ' + u.email, disabled: self || locked, onchange: (e) => change(u, { role: e.target.value }, 'Role updated') }, Object.entries(ROLE_NAMES).filter(([k]) => k !== 'super_admin' || state.me.role === 'super_admin' || u.role === 'super_admin').map(([k, v]) => el('option', { value: k, selected: k === u.role }, v)));
+    const mgrs = rows.filter((m) => m.active && ['super_admin', 'cs_director', 'cs_team_lead'].includes(m.role) && m.email !== u.email);
+    const mgr = el('select', { 'aria-label': 'Reports to, for ' + u.email, disabled: locked || ['super_admin', 'cs_director', 'viewer'].includes(u.role), onchange: (e) => change(u, { managerEmail: e.target.value || null }, 'Reporting line updated') },
+      el('option', { value: '' }, ['super_admin', 'cs_director', 'viewer'].includes(u.role) ? 'Top of the organogram' : 'Nobody yet'), ...mgrs.map((m) => el('option', { value: m.email, selected: m.email === u.managerEmail }, (m.name || m.email) + ' (' + ROLE_NAMES[m.role] + ')')));
     return el('tr', { style: 'cursor:default' },
       el('td', {}, el('strong', {}, u.name || u.email), u.name ? el('div', { class: 'small muted' }, u.email) : null, self ? el('span', { class: 'small muted' }, ' (you)') : null),
-      el('td', {}, sel), el('td', {}, el('span', { class: 'chip ' + (u.active ? 'ok' : 'low') }, u.active ? 'active' : 'deactivated')),
+      el('td', {}, sel), el('td', {}, mgr), el('td', {}, el('span', { class: 'chip ' + (u.active ? 'ok' : 'low') }, u.active ? 'active' : 'deactivated')),
       el('td', { class: 'small muted' }, rel(u.lastSeenAt)),
       el('td', {}, self || locked ? null : el('button', { class: 'btn', onclick: () => change(u, { active: !u.active }, u.active ? 'User deactivated' : 'User restored') }, u.active ? 'Deactivate' : 'Restore')));
   }));
+}
+
+/* ---------- Dashboard: every client in your scope ---------- */
+const dbState = { data: null, sel: null };
+const HEALTH = { 'at risk': 'high', neutral: 'medium', healthy: 'ok' };
+const SEV_RANK = { urgent: 0, high: 1, medium: 2, low: 3 };
+const ago = (d) => d == null ? 'Never' : d === 0 ? 'Today' : d + (d === 1 ? ' day ago' : ' days ago');
+function renewalChip(d, iso) {
+  if (d == null) return el('span', { class: 'muted small' }, 'No date');
+  const cls = d < 0 ? 'urgent' : d <= 30 ? 'high' : d <= 90 ? 'medium' : 'low';
+  return el('div', {}, el('div', { class: 'small' }, fmtDate(iso)), el('span', { class: 'chip ' + cls }, d < 0 ? 'ended ' + (-d) + 'd ago' : 'in ' + d + ' days'));
+}
+function seatBar(c) {
+  if (c.activeSeats == null) return el('span', { class: 'muted small' }, c.paidSeats == null ? '–' : c.paidSeats + ' paid');
+  const u = c.utilisationPct;
+  const over = u != null && u > 100;
+  const bar = u == null ? null : el('div', { style: 'height:6px;background:var(--blue-faint);border-radius:3px;margin-top:4px;width:110px' }, el('div', { style: 'height:6px;border-radius:3px;width:' + Math.min(u, 100) + '%;background:' + (over ? 'var(--urgent)' : u < 50 ? 'var(--high)' : 'var(--blue)') }));
+  return el('div', {}, el('span', {}, c.activeSeats + (c.paidSeats != null ? ' of ' + c.paidSeats : '')), u != null ? el('span', { class: 'small ' + (over ? '' : 'muted'), style: over ? 'color:var(--urgent);font-weight:600' : '' }, ' (' + u + '%)') : null, bar,
+    c.seatChange90d ? el('div', { class: 'small muted' }, (c.seatChange90d > 0 ? '+' : '') + c.seatChange90d + ' in 90 days') : null);
+}
+const payrollChip = (p) => el('span', { class: 'chip ' + ({ ok: 'ok', late: 'urgent', not_set_up: 'high', unknown: 'low' }[p.status]) }, { ok: 'on track', late: 'late', not_set_up: 'not set up', unknown: 'not linked' }[p.status]);
+const attention = (c) => (c.topSeverity ? SEV_RANK[c.topSeverity] : 5) * 1000 + ((c.health || '').toLowerCase() === 'at risk' ? 0 : 500) + Math.min(Math.max(c.daysToRenewal == null ? 400 : c.daysToRenewal, 0), 400);
+function sortClients(list, how) {
+  const by = { attention: (a, b) => attention(a) - attention(b), arr: (a, b) => Number(BigInt(b.arrKobo || 0) - BigInt(a.arrKobo || 0)), renewal: (a, b) => (a.daysToRenewal ?? 99999) - (b.daysToRenewal ?? 99999), health: (a, b) => ['at risk', 'neutral', 'healthy'].indexOf((a.health || '').toLowerCase()) - ['at risk', 'neutral', 'healthy'].indexOf((b.health || '').toLowerCase()), name: (a, b) => a.name.localeCompare(b.name) };
+  return [...list].sort(by[how] || by.attention);
+}
+async function loadDashboard() {
+  const who = $('db-who');
+  if (!who.dataset.wired) {
+    who.dataset.wired = '1';
+    who.addEventListener('change', () => loadDashboard().catch((e) => notice(e.message, true)));
+    $('db-sort').addEventListener('change', drawClients);
+    $('db-search').addEventListener('input', drawClients);
+  }
+  const keep = who.value;
+  const q = keep ? '?csm=' + encodeURIComponent(keep) : '';
+  const d = await api('/portfolio' + q);
+  dbState.data = d; $('db-detail').hidden = true;
+  $('db-title').textContent = state.me.role === 'csm' && d.people.length <= 1 ? 'My portfolio' : (state.me.isAdmin || state.me.role === 'viewer' ? 'Portfolio dashboard' : 'Team dashboard');
+  $('db-who-wrap').hidden = d.people.length <= 1;
+  who.replaceChildren(el('option', { value: '' }, d.people.length > 1 && state.me.role !== 'csm' ? 'Everyone' : 'All my clients'), ...d.people.map((p) => el('option', { value: p.email, selected: p.email === keep }, (p.name || p.email) + (p.email === state.me.email ? ' (me)' : ''))));
+  who.value = keep;
+  $('db-asof').textContent = 'Data as of ' + fmtDate(d.asOf) + '. Sorted by what needs attention first.';
+  const s = d.summary;
+  const tile = (label, value, note, cls) => el('div', { class: 'card stat' }, el('b', { class: cls || '' }, value), el('span', {}, label), note ? el('span', { class: 'small muted' }, note) : null);
+  $('db-kpis').replaceChildren(
+    tile('Total ARR', money(s.arrKobo), s.clients + ' clients'),
+    tile('At Risk', String(s.atRisk.count), money(s.atRisk.arrKobo) + ' ARR'),
+    tile('Renewals in 90 days', String(s.renewals90.count), money(s.renewals90.arrKobo) + ' ARR'),
+    tile('Open alerts', String(s.openAlerts), s.urgentAlerts + (s.urgentAlerts === 1 ? ' client' : ' clients') + ' with an urgent or high alert'),
+    tile('No contact in 30 days', String(s.noContact30), 'Calls, meetings or emails logged in HubSpot'),
+    tile('Seat use', s.avgUtilisationPct == null ? '–' : s.avgUtilisationPct + '%', 'Average of active users against paid seats'),
+  );
+  $('db-team-wrap').hidden = !(d.team.length > 1 && !keep);
+  $('db-team').replaceChildren(...d.team.map((t) => el('tr', { onclick: () => { if (t.csmEmail) { $('db-who').value = t.csmEmail; loadDashboard().catch((e) => notice(e.message, true)); } } },
+    el('td', {}, el('strong', {}, t.csmName || t.csmEmail || 'Unassigned')), el('td', {}, t.clients), el('td', {}, money(t.arrKobo)), el('td', {}, t.atRisk), el('td', {}, t.renewals90), el('td', {}, t.openAlerts))));
+  drawClients();
+}
+function drawClients() {
+  const d = dbState.data; if (!d) return;
+  const term = $('db-search').value.trim().toLowerCase();
+  const list = sortClients(d.clients.filter((c) => !term || c.name.toLowerCase().includes(term) || (c.industry || '').toLowerCase().includes(term)), $('db-sort').value);
+  const showCsm = $('db-who').value === '' && d.team.length > 1;
+  $('db-clients').replaceChildren(...(list.length ? list.map((c) => el('tr', { onclick: () => openClient(c.hubspotId) },
+    el('td', {}, el('strong', {}, c.name), el('div', { class: 'small muted' }, [c.industry, showCsm ? (c.csmName || c.csmEmail || 'Unassigned') : null].filter(Boolean).join(' · ')), c.onboarding === 'stalled' ? el('span', { class: 'chip high' }, 'onboarding stalled') : c.onboarding === 'in_progress' ? el('span', { class: 'chip low' }, 'onboarding') : null),
+    el('td', {}, el('span', { class: 'chip ' + (HEALTH[(c.health || '').toLowerCase()] || 'low') }, c.health || 'Not set')),
+    el('td', {}, c.arrKobo == null ? '–' : money(c.arrKobo)),
+    el('td', {}, renewalChip(c.daysToRenewal, c.contractEnd)),
+    el('td', {}, seatBar(c)),
+    el('td', { class: c.daysSinceContact == null || c.daysSinceContact > 30 ? '' : 'muted' }, c.daysSinceContact != null && c.daysSinceContact > 30 ? el('b', { style: 'color:var(--high)' }, ago(c.daysSinceContact)) : ago(c.daysSinceContact)),
+    el('td', {}, payrollChip(c.payroll)),
+    el('td', {}, c.openAlerts ? el('span', { class: 'chip ' + (c.topSeverity || 'low') }, c.openAlerts + ' ' + c.topSeverity) : el('span', { class: 'muted small' }, 'None')),
+    el('td', {}, c.openTickets ? String(c.openTickets) : el('span', { class: 'muted small' }, '0')))) : [el('tr', {}, el('td', { colspan: '9', class: 'muted' }, d.clients.length ? 'No clients match your search.' : 'No clients are assigned yet.'))]));
+}
+function sparkline(points) {
+  const v = points.filter((p) => p.seats != null);
+  if (v.length < 2) return el('p', { class: 'muted small' }, 'Not enough history yet to draw a trend.');
+  const W = 300, H = 60, P = 6; const min = Math.min(...v.map((p) => p.seats)), max = Math.max(...v.map((p) => p.seats)); const span = Math.max(max - min, 1);
+  const xy = v.map((p, i) => [P + (i * (W - 2 * P)) / (v.length - 1), H - P - ((p.seats - min) * (H - 2 * P)) / span]);
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg'); svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H); svg.setAttribute('width', '100%'); svg.setAttribute('style', 'max-width:320px'); svg.setAttribute('role', 'img'); svg.setAttribute('aria-label', 'Active users over the last 90 days, from ' + v[0].seats + ' to ' + v[v.length - 1].seats);
+  const line = document.createElementNS(ns, 'polyline'); line.setAttribute('points', xy.map((p) => p.join(',')).join(' ')); line.setAttribute('fill', 'none'); line.setAttribute('stroke', '#004af5'); line.setAttribute('stroke-width', '2');
+  const dot = document.createElementNS(ns, 'circle'); dot.setAttribute('cx', xy[xy.length - 1][0]); dot.setAttribute('cy', xy[xy.length - 1][1]); dot.setAttribute('r', '4'); dot.setAttribute('fill', '#004af5');
+  svg.append(line, dot);
+  return el('div', {}, svg, el('div', { class: 'small muted' }, v[0].seats + ' active users on ' + fmtDate(v[0].date) + ', ' + v[v.length - 1].seats + ' on ' + fmtDate(v[v.length - 1].date)));
+}
+const CAT = { UPSELL: 'Upsell', CROSS_SELL_EWA: 'EWA', CROSS_SELL_STATUTORY: 'Statutory', CROSS_SELL_OTHER: 'Other add-ons' };
+async function openClient(id) {
+  const box = $('db-detail'); box.hidden = false; box.replaceChildren(el('p', { class: 'muted' }, 'Loading...'));
+  box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  try {
+    const r = await api('/portfolio/clients/' + encodeURIComponent(id)); const c = r.client;
+    const fact = (k, v) => el('div', {}, el('div', { class: 'small muted' }, k), el('div', {}, v));
+    const canQbr = ['csm', 'cs_director', 'cs_team_lead'].includes(state.me.role);
+    box.replaceChildren(...[
+      el('div', { class: 'bar' }, el('strong', { style: 'color:var(--navy);font-size:20px;margin-right:auto' }, c.name), el('span', { class: 'chip ' + (HEALTH[(c.health || '').toLowerCase()] || 'low') }, c.health || 'Not set'),
+        canQbr ? el('button', { class: 'btn', onclick: () => openQbr({ hubspotId: c.hubspotId, name: c.name }, 'db-qbr') }, 'Draft QBR') : null, el('button', { class: 'btn', onclick: () => (box.hidden = true) }, 'Close')),
+      el('div', { class: 'grid2' },
+        el('div', { style: 'display:grid;gap:10px' }, el('strong', {}, 'Account'),
+          fact('CSM', c.csmName || c.csmEmail || 'Unassigned'), fact('Industry', c.industry || '–'), fact('ARR', c.arrKobo == null ? '–' : money(c.arrKobo)),
+          fact('Contract', c.contractEnd ? fmtDate(c.contractEnd) + (c.daysToRenewal != null ? ' (' + (c.daysToRenewal < 0 ? 'ended ' + (-c.daysToRenewal) + ' days ago' : 'in ' + c.daysToRenewal + ' days') + ')' : '') : 'No date'),
+          fact('Last contact', c.lastContact ? fmtDate(c.lastContact) + ' (' + ago(c.daysSinceContact) + ')' : 'Never logged')),
+        el('div', { style: 'display:grid;gap:10px' }, el('strong', {}, 'Usage and adoption'),
+          fact('Seats', c.activeSeats == null ? 'Not linked to the Control Panel' : c.activeSeats + ' active of ' + (c.paidSeats ?? '?') + ' paid' + (c.utilisationPct != null ? ' (' + c.utilisationPct + '%)' : '') + (c.contractorSeats ? ', ' + c.contractorSeats + ' contractors' : '')),
+          fact('Payroll', el('span', {}, payrollChip(c.payroll), ' ', (c.payroll.frequency ? c.payroll.frequency.toLowerCase().replace('_', '-') + ', ' : '') + (c.payroll.lastPayDate ? 'last paid ' + fmtDate(c.payroll.lastPayDate) : 'no payroll run yet'))),
+          fact('Earned Wage Access', c.ewa.lastUsed ? 'Used ' + fmtDate(c.ewa.lastUsed) + (c.ewa.volume30dKobo && c.ewa.volume30dKobo !== '0' ? ', ' + money(c.ewa.volume30dKobo) + ' in 30 days' : '') : 'Not used'),
+          fact('Statutory remittance', c.statutoryLastUsed ? 'Used ' + fmtDate(c.statutoryLastUsed) : 'Not used'),
+          fact('Seats, last 90 days', sparkline(r.seatHistory)))),
+      c.signals.length ? el('div', {}, el('strong', {}, 'Growth signals'), el('ul', { style: 'margin:6px 0' }, c.signals.map((x) => el('li', {}, x)))) : null,
+      el('div', {}, el('strong', {}, 'Open alerts'), r.alerts.length ? el('div', { style: 'display:grid;gap:8px;margin-top:8px' }, r.alerts.map((a) => el('div', {}, el('span', { class: 'chip ' + a.severity }, a.severity), ' ', el('b', {}, a.title), el('span', { class: 'chip low', style: 'margin-left:6px' }, a.state), el('div', { class: 'small muted' }, a.summary)))) : el('p', { class: 'muted small' }, 'No open alerts.')),
+      el('div', {}, el('strong', {}, 'Support tickets'), r.tickets.length ? el('ul', { style: 'margin:6px 0' }, r.tickets.map((t) => el('li', {}, (t.open ? 'Open ' + t.ageDays + 'd: ' : 'Closed: ') + t.subject + (t.reopenCount ? ' (reopened ' + t.reopenCount + 'x)' : '') + (t.sentiment != null && t.sentiment <= -1 ? ' (frustrated)' : '')))) : el('p', { class: 'muted small' }, 'No open or recently closed tickets.')),
+      r.expansionRevenue12m.length ? el('div', {}, el('strong', {}, 'Expansion revenue, last 12 months'), el('ul', { style: 'margin:6px 0' }, r.expansionRevenue12m.map((x) => el('li', {}, (CAT[x.category] || x.category) + ': ' + money(x.amountKobo))))) : null,
+      el('div', { id: 'db-qbr', class: 'detail', hidden: true })].filter(Boolean));
+  } catch (e) { box.replaceChildren(el('p', { class: 'muted' }, e.message)); }
 }
 `;

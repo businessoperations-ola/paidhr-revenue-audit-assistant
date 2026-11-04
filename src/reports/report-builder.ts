@@ -33,8 +33,11 @@ export class ReportBuilder {
     @Inject(Database) private readonly db: Database,
   ) {}
 
-  /** `csmEmail` is required for the CSM audience: that report is one person's portfolio. */
-  async build(audience: Audience, cadence: Cadence, date: IsoDate, csmEmail?: string): Promise<ReportData | null> {
+  /**
+   * The CSM audience needs `csm`: one person's email (their own portfolio), or a team
+   * (`{ emails, label }`: a team lead's team, or everyone for a director) with a row per person.
+   */
+  async build(audience: Audience, cadence: Cadence, date: IsoDate, csm?: string | { emails: string[]; label: string }): Promise<ReportData | null> {
     const asOf = await this.snapshots.latestSnapshotDate(date);
     if (!asOf) return null;
     const period = periodFor(cadence, date);
@@ -42,8 +45,10 @@ export class ReportBuilder {
       case 'executive':
         return this.executive(cadence, asOf, period);
       case 'csm':
-        if (!csmEmail) throw new Error('A CSM report needs a CSM email');
-        return this.csm(cadence, asOf, period, csmEmail.toLowerCase());
+        if (!csm) throw new Error('A CSM report needs a CSM email');
+        return typeof csm === 'string'
+          ? this.csm(cadence, asOf, period, [csm.toLowerCase()], null)
+          : this.csm(cadence, asOf, period, csm.emails.map((e) => e.toLowerCase()), csm.label);
       case 'implementation':
         return this.implementation(cadence, asOf, period);
       case 'support':
@@ -133,28 +138,33 @@ export class ReportBuilder {
 
   // ------------------------------------------------------------------ CSM portfolio
 
-  private async csm(cadence: Cadence, asOf: IsoDate, period: { from: IsoDate; to: IsoDate }, csmEmail: string): Promise<ReportData> {
-    const [companies, myFlags, radar, ledger] = await Promise.all([
+  private async csm(cadence: Cadence, asOf: IsoDate, period: { from: IsoDate; to: IsoDate }, emails: string[], team: string | null): Promise<ReportData> {
+    const set = new Set(emails);
+    const [companies, allFlags, radar, ledger] = await Promise.all([
       this.snapshots.loadCompanies(asOf),
-      this.flags.list({ status: 'open', csmEmail, limit: 500 }),
+      this.flags.list({ status: 'open', limit: 1000 }),
       this.cx.radar(asOf),
       this.analytics.ledger(Number(asOf.slice(0, 4)), asOf),
     ]);
-    const mine = companies.filter((c) => c.csmEmail === csmEmail);
+    const mine = companies.filter((c) => c.csmEmail !== null && set.has(c.csmEmail.toLowerCase()));
+    const myFlags = allFlags.filter((f) => f.csmEmail !== null && set.has(f.csmEmail.toLowerCase()));
+    const mineRows = (ledger?.rows ?? []).filter((r) => set.has(r.csmEmail));
+    const row = mineRows.length === 0 ? undefined : { deltaKobo: mineRows.reduce((n, r) => n + r.deltaKobo, 0n), baselineKobo: mineRows.reduce((n, r) => n + r.baselineKobo, 0n) };
+    const rowPct = row && row.baselineKobo > 0n ? Math.round(Number((row.deltaKobo * 10000n) / row.baselineKobo)) / 100 : null;
     const arr = mine.reduce((n, c) => n + (c.arrKobo ?? 0n), 0n);
     const atRisk = mine.filter((c) => c.healthStatus?.toLowerCase() === 'at risk');
-    const row = ledger?.rows.find((r) => r.csmEmail === csmEmail);
     const sections: Section[] = [
       {
         kind: 'kpis',
         items: [
-          { label: 'My ARR', value: formatNgn(arr), note: `${mine.length} accounts` },
+          { label: team ? 'Team ARR' : 'My ARR', value: formatNgn(arr), note: `${mine.length} accounts` },
           { label: 'At Risk accounts', value: String(atRisk.length), note: formatNgn(atRisk.reduce((n, c) => n + (c.arrKobo ?? 0n), 0n)), tone: atRisk.length > 0 ? 'warn' : 'good' },
           { label: 'Open alerts', value: String(myFlags.length), note: `${myFlags.filter((f) => f.severity === 'urgent' || f.severity === 'high').length} urgent or high`, tone: myFlags.length > 0 ? 'warn' : 'good' },
-          ...(row ? [{ label: `Since ${fmtDate(ledger!.baselineDate)}`, value: signed(row.deltaKobo), note: `${pct(row.deltaPct)} vs your start-of-year ARR`, tone: row.deltaKobo >= 0n ? ('good' as const) : ('bad' as const) }] : []),
+          ...(row ? [{ label: `Since ${fmtDate(ledger!.baselineDate)}`, value: signed(row.deltaKobo), note: `${pct(rowPct)} vs ${team ? 'start-of-year ARR' : 'your start-of-year ARR'}`, tone: row.deltaKobo >= 0n ? ('good' as const) : ('bad' as const) }] : []),
         ],
       },
-      this.alertTable('My open alerts', myFlags.slice(0, 20)),
+      ...(team ? [this.teamTable(mine, myFlags, emails, asOf)] : []),
+      this.alertTable(team ? 'Open alerts' : 'My open alerts', myFlags.slice(0, 20)),
     ];
     const upcoming = mine
       .filter((c) => c.contractEndDate && c.contractEndDate >= asOf && c.contractEndDate <= addDays(asOf, 60))
@@ -163,19 +173,41 @@ export class ReportBuilder {
       kind: 'table', heading: 'Renewals in the next 60 days', columns: ['Customer', 'Contract ends', 'In', 'ARR'], empty: 'No contracts end in the next 60 days.',
       rows: upcoming.map((c) => [c.name, fmtDate(c.contractEndDate!), `${daysBetween(asOf, c.contractEndDate!)} days`, c.arrKobo === null ? 'n/a' : formatNgn(c.arrKobo)]),
     });
-    const picks = (radar?.entries ?? []).filter((e) => e.csmEmail === csmEmail);
+    const picks = (radar?.entries ?? []).filter((e) => e.csmEmail !== null && set.has(e.csmEmail.toLowerCase()));
     sections.push({
       kind: 'table', heading: 'Expansion opportunities', columns: ['Customer', 'Signals', 'Suggested conversation'], empty: 'No expansion signals on your accounts right now.',
       rows: picks.map((e) => [e.name, e.signals.map((s) => s.text).join('; '), e.signals[0]!.play]),
     });
     sections.push({
-      kind: 'table', heading: 'My accounts', columns: ['Customer', 'Health', 'ARR', 'Contract ends', 'Last contact'], empty: 'No accounts are assigned to you in HubSpot.',
+      kind: 'table', heading: 'My accounts', columns: team ? ['Customer', 'CSM', 'Health', 'ARR', 'Contract ends', 'Last contact'] : ['Customer', 'Health', 'ARR', 'Contract ends', 'Last contact'], empty: team ? 'No accounts are assigned to this team in HubSpot.' : 'No accounts are assigned to you in HubSpot.',
       rows: [...mine]
         .sort((a, b) => (HEALTH_RANK[a.healthStatus ?? ''] ?? 3) - (HEALTH_RANK[b.healthStatus ?? ''] ?? 3) || Number((b.arrKobo ?? 0n) - (a.arrKobo ?? 0n)))
-        .map((c) => [c.name, c.healthStatus ?? 'Not set', c.arrKobo === null ? 'n/a' : formatNgn(c.arrKobo), c.contractEndDate ? fmtDate(c.contractEndDate) : 'n/a', c.lastActivityDate ? fmtDate(c.lastActivityDate) : 'Never']),
+        .map((c) => [c.name, ...(team ? [c.csmName ?? c.csmEmail ?? 'Unassigned'] : []), c.healthStatus ?? 'Not set', c.arrKobo === null ? 'n/a' : formatNgn(c.arrKobo), c.contractEndDate ? fmtDate(c.contractEndDate) : 'n/a', c.lastActivityDate ? fmtDate(c.lastActivityDate) : 'Never']),
     });
-    const name = mine[0]?.csmName ?? csmEmail;
-    return this.wrap('csm', cadence, `${cadence === 'daily' ? 'Daily' : cadence === 'weekly' ? 'Weekly' : 'Monthly'} portfolio report`, asOf, period, sections, `For ${name}`);
+    const word = cadence === 'daily' ? 'Daily' : cadence === 'weekly' ? 'Weekly' : 'Monthly';
+    if (team) return this.wrap('csm', cadence, `${word} team report`, asOf, period, sections, `For ${team}`);
+    return this.wrap('csm', cadence, `${word} portfolio report`, asOf, period, sections, `For ${mine[0]?.csmName ?? emails[0]}`);
+  }
+
+  /** One row per CSM, so a team lead or director sees who is carrying what. */
+  private teamTable(mine: Awaited<ReturnType<SnapshotRepository['loadCompanies']>>, flags: StoredFlag[], emails: string[], asOf: IsoDate): Section {
+    const rows = emails
+      .map((e) => {
+        const cs = mine.filter((c) => c.csmEmail?.toLowerCase() === e);
+        const fl = flags.filter((f) => f.csmEmail?.toLowerCase() === e);
+        return { e, cs, fl };
+      })
+      .filter((r) => r.cs.length > 0 || r.fl.length > 0)
+      .sort((a, b) => Number(b.cs.reduce((n, c) => n + (c.arrKobo ?? 0n), 0n) - a.cs.reduce((n, c) => n + (c.arrKobo ?? 0n), 0n)))
+      .map(({ e, cs, fl }) => [
+        cs[0]?.csmName ?? e,
+        String(cs.length),
+        formatNgn(cs.reduce((n, c) => n + (c.arrKobo ?? 0n), 0n)),
+        String(cs.filter((c) => c.healthStatus?.toLowerCase() === 'at risk').length),
+        String(cs.filter((c) => c.contractEndDate && c.contractEndDate >= asOf && c.contractEndDate <= addDays(asOf, 60)).length),
+        String(fl.length),
+      ]);
+    return { kind: 'table', heading: 'By CSM', columns: ['CSM', 'Accounts', 'ARR', 'At Risk', 'Renewals in 60 days', 'Open alerts'], rows, empty: 'Nobody in this team has accounts yet.' };
   }
 
   // ------------------------------------------------------------------ implementation & onboarding

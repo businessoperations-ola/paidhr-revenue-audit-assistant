@@ -17,6 +17,7 @@ import { z } from 'zod';
 import { Public, Roles, type AuthUser } from '../auth/auth.js';
 import { APP_CONFIG, type AppConfig } from '../config/config.js';
 import { Database } from '../db/database.js';
+import { OrgService } from '../org/org.service.js';
 import { ADMIN_APP_HTML } from '../web/admin-app.js';
 import { LOGO_BLUE_PNG, LOGO_WHITE_PNG } from '../web/brand/logos.js';
 
@@ -25,9 +26,28 @@ type Req = { user: AuthUser };
 /** The signed-in user, so the web app can show the right screens. */
 @Controller('me')
 export class MeController {
+  constructor(
+    @Inject(Database) private readonly db: Database,
+    @Inject(OrgService) private readonly org: OrgService,
+  ) {}
+
   @Get()
-  me(@Req() req: Req) {
-    return { ...req.user, isAdmin: req.user.role === 'super_admin' || req.user.role === 'cs_director' };
+  async me(@Req() req: Req) {
+    const { actualUser, ...user } = req.user;
+    const scope = await this.org.scopeFor(user);
+    const base = {
+      ...user,
+      isAdmin: user.role === 'super_admin' || user.role === 'cs_director',
+      hasTeam: scope.all || scope.emails.size > 1,
+      viewingAs: actualUser ? { actual: actualUser } : null,
+    };
+    // Only a real super admin (not someone being viewed) can switch views, and is told who they can switch to.
+    const real = actualUser ?? user;
+    if (real.role !== 'super_admin') return { ...base, canViewAs: false, people: [] };
+    if (actualUser) {
+      await this.db.query(`INSERT INTO action_log (actor, action, object_type, object_id) VALUES ($1, 'view_as', 'app_user', $2)`, [actualUser.email, user.email]);
+    }
+    return { ...base, canViewAs: true, people: (await this.org.users()).filter((u) => u.email !== real.email) };
   }
 }
 

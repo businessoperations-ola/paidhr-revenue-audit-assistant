@@ -14,7 +14,7 @@ export const ADMIN_APP_HTML = /* html */ `<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>PaidHR Audit Assistant</title>
+<title>Oyela</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
@@ -44,6 +44,8 @@ h1, h2, h3 { color: var(--navy); font-weight: 700; letter-spacing: -0.01em; }
 /* Announcement strip, as on paidhr.com */
 .strip { background: var(--midnight); color: #fff; text-align: center; font-size: 13.5px; font-weight: 500; padding: 9px 16px; }
 .strip b { color: var(--yellow); font-weight: 600; }
+.strip.va { background: var(--yellow); color: var(--midnight); } .strip.va b { color: var(--midnight); }
+.strip.va .btn { margin-left: 8px; padding: 3px 12px; }
 
 header.top { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 28px; padding: 14px max(16px, 3vw); background: var(--bg); border-bottom: 1px solid var(--line); }
 .brand { display: flex; align-items: center; gap: 12px; text-decoration: none; }
@@ -65,9 +67,6 @@ nav button[aria-current="page"] { background: var(--blue-soft); color: var(--nav
 }
 .role-chip { font: 600 12px var(--font); padding: 3px 10px; border-radius: 999px; background: var(--blue-soft); color: var(--navy); text-transform: capitalize; }
 .role-chip.admin { background: var(--yellow); color: var(--midnight); }
-.tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; border-radius: 10px; background: var(--blue-faint); }
-.tabs button { font: 600 14px var(--font); padding: 9px 12px; border: 0; border-radius: 8px; background: none; color: var(--nav-ink); cursor: pointer; }
-.tabs button[aria-selected="true"] { background: #fff; color: var(--blue); box-shadow: 0 1px 3px rgba(11, 26, 60, .15); }
 .features { list-style: none; padding: 0; margin: 28px 0 0; display: grid; gap: 12px; max-width: 46ch; }
 .features li { display: flex; gap: 12px; align-items: flex-start; color: rgba(255, 255, 255, .92); font-size: 16px; }
 .features li::before { content: ""; flex: none; width: 22px; height: 22px; margin-top: 2px; border-radius: 50%; background: var(--yellow) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M6 12.5l4 4 8-9' fill='none' stroke='%230b1a3c' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 14px no-repeat; }
@@ -126,6 +125,8 @@ td strong { color: var(--nav-ink); }
 .signin-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 420px); gap: 40px; align-items: center; padding: 24px max(20px, 5vw) 64px; }
 @media (max-width: 860px) { .signin-body { grid-template-columns: 1fr; } .signin-page::before { display: none; } }
 .signin-pitch h1 { color: #fff; font-size: clamp(34px, 5vw, 56px); line-height: 1.08; margin: 0 0 18px; font-weight: 700; }
+.signin-pitch .meaning { font-size: 15px; color: var(--yellow); margin: 0 0 14px; }
+.signin-pitch .meaning b { color: #fff; }
 .signin-pitch p { font-size: 18px; color: rgba(255, 255, 255, .9); max-width: 32ch; margin: 0; }
 .signin-card { background: #fff; color: var(--ink); border-radius: 6px; padding: 40px 36px; display: grid; gap: 14px; box-shadow: 0 20px 50px rgba(11, 26, 60, .25); }
 .signin-card h2 { color: #000; font-size: 34px; font-weight: 700; }
@@ -135,9 +136,10 @@ td strong { color: var(--nav-ink); }
 </style>
 </head>
 <body>
+<div class="strip va" id="vabar" hidden></div>
 <div class="strip" id="strip" hidden>Alerts are in <b>dry-run mode</b>: nothing is sent to CSMs, team leads or HubSpot.</div>
 <header class="top" id="top" hidden>
-  <a class="brand" href="#alerts" aria-label="PaidHR Audit Assistant"><img src="${LOGO_BLUE_DATA_URI}" alt="PaidHR" width="86" height="30"><span>Audit Assistant</span></a>
+  <a class="brand" href="#alerts" aria-label="Oyela"><img src="${LOGO_BLUE_DATA_URI}" alt="PaidHR" width="86" height="30"><span>Oyela</span></a>
   <div class="who" id="who"></div>
 </header>
 <section id="signin" class="signin-page" hidden>
@@ -147,8 +149,9 @@ td strong { color: var(--nav-ink); }
   </div>
   <div class="signin-body">
     <div class="signin-pitch">
-      <h1>Revenue &amp; Data Audit Assistant</h1>
-      <p>One place for the PaidHR CX team to catch billing and payroll problems, grow accounts and keep customers.</p>
+      <h1>Oyela</h1>
+      <p class="meaning"><b>Oyela</b> (Yoruba): to bring forth, to bring to light.</p>
+      <p>Bring your revenue, payroll and customer data to light. One place for the PaidHR CX team to catch problems early, grow accounts and keep customers.</p>
       <ul class="features">
         <li>Daily checks on billing, payroll and account data, sent to the right CSM</li>
         <li>Leadership, CSM, implementation and support reports</li>
@@ -157,12 +160,8 @@ td strong { color: var(--nav-ink); }
       </ul>
     </div>
     <div class="signin-card">
-      <div class="tabs" role="tablist" aria-label="Sign in as">
-        <button role="tab" id="tab-staff" aria-selected="true">Staff</button>
-        <button role="tab" id="tab-admin" aria-selected="false">Admin</button>
-      </div>
-      <h2 id="signin-title">Welcome back!</h2>
-      <p id="signin-sub">Sign in with your PaidHR Google Workspace account to see your alerts, reports and tools.</p>
+      <h2>Welcome back!</h2>
+      <p>Sign in with your PaidHR Google Workspace account. What you see depends on your role.</p>
       <div id="signin-notice" class="notice err" role="alert" hidden></div>
       <div class="gbtn-wrap" id="gbtn"></div>
       <p class="fine">Only company accounts that an admin has added can sign in. Need access? Ask your CS Director.</p>
@@ -232,7 +231,7 @@ const RULE_LABELS = {
   mandatory_fields: 'Mandatory HubSpot fields',
   seat_history_days: 'Seat history to compare (days)',
 };
-const state = { token: null, me: null, view: 'alerts', dryRun: false, entry: 'staff' };
+const state = { token: null, me: null, view: 'alerts', dryRun: false, viewAs: recall('viewAs') || '' };
 
 function el(tag, attrs = {}, ...children) {
   const n = document.createElement(tag);
@@ -257,6 +256,7 @@ function recall(key) { try { return sessionStorage.getItem(key); } catch { retur
 async function api(path, opts = {}) {
   const headers = { 'content-type': 'application/json' };
   if (state.token) headers.authorization = 'Bearer ' + state.token;
+  if (state.viewAs) headers['x-view-as'] = state.viewAs;
   const res = await fetch(path, { ...opts, headers });
   if (res.status === 401) { signOut('Your sign-in expired. Please sign in again.'); throw new Error('unauthorized'); }
   const body = await res.json().catch(() => ({}));
@@ -265,7 +265,7 @@ async function api(path, opts = {}) {
 }
 
 function signOut(message) {
-  state.token = null; state.me = null; store('idToken', null);
+  state.token = null; state.me = null; state.viewAs = ''; store('idToken', null); store('viewAs', null);
   $('shell').hidden = true; $('who').textContent = '';
   document.querySelectorAll('main > section').forEach((s) => (s.hidden = true));
   $('top').hidden = true; $('app').hidden = true; $('strip').hidden = true;
@@ -273,17 +273,7 @@ function signOut(message) {
   if (message) notice(message, true);
 }
 
-function setEntry(entry) {
-  state.entry = entry; store('entry', entry);
-  $('tab-staff').setAttribute('aria-selected', String(entry === 'staff')); $('tab-admin').setAttribute('aria-selected', String(entry === 'admin'));
-  $('signin-title').textContent = entry === 'admin' ? 'Admin console' : 'Welcome back!';
-  $('signin-sub').textContent = entry === 'admin' ? 'For super admins and CS Directors. Manage users, rules, team leads and broadcasts.' : 'Sign in with your PaidHR Google Workspace account to see your alerts, reports and tools.';
-}
-$('tab-staff').addEventListener('click', () => setEntry('staff'));
-$('tab-admin').addEventListener('click', () => setEntry('admin'));
-
 async function start() {
-  setEntry(recall('entry') === 'admin' ? 'admin' : 'staff');
   const cfg = await fetch('/app-config').then((r) => r.json());
   state.dryRun = !!cfg.alertsDryRun;
   if (cfg.helpEmail) { $('help').href = 'mailto:' + cfg.helpEmail; $('help').hidden = false; }
@@ -303,21 +293,28 @@ async function start() {
 
 async function enter() {
   state.me = await api('/me');
-  if (state.entry === 'admin' && !state.me.isAdmin && !(state.token == null)) {
-    const email = state.me.email; signOut();
-    notice(email + ' is not an administrator. Use the Staff tab to sign in.', true); return;
-  }
   $('signin').hidden = true; $('signin-notice').hidden = true;
   $('top').hidden = false; $('app').hidden = false; $('shell').hidden = false; $('strip').hidden = !state.dryRun; notice('');
-  $('who').replaceChildren(el('span', { class: 'role-chip' + (state.me.isAdmin ? ' admin' : ''), style: state.me.role === 'csm' ? 'text-transform:uppercase' : '' }, state.me.role.replace(/_/g, ' ')), el('span', {}, state.me.email),
-    el('button', { class: 'btn', onclick: () => signOut() }, 'Sign out'));
+  const real = state.me.viewingAs ? state.me.viewingAs.actual : { email: state.me.email, role: state.me.role };
+  const who = [];
+  if (state.me.canViewAs) {
+    const groups = [['cs_director', 'Directors'], ['cs_team_lead', 'Team leads'], ['csm', 'CSMs'], ['implementation_manager', 'Implementation'], ['support_specialist', 'Support'], ['viewer', 'Viewers'], ['super_admin', 'Super admins']];
+    const sel = el('select', { id: 'viewas', 'aria-label': 'View Oyela as', onchange: (e) => { state.viewAs = e.target.value; store('viewAs', state.viewAs || null); enter().catch((err) => notice(err.message, true)); } },
+      el('option', { value: '' }, 'My own view'),
+      ...groups.map(([r, label]) => { const ps = state.me.people.filter((p) => p.role === r); return ps.length ? el('optgroup', { label }, ps.map((p) => el('option', { value: p.email, selected: p.email === state.viewAs }, (p.name || p.email)))) : null; }));
+    who.push(el('label', { class: 'small' }, 'View as ', sel));
+  }
+  who.push(el('span', { class: 'role-chip' + (state.me.isAdmin ? ' admin' : ''), style: 'text-transform:none' }, ROLE_NAMES[state.me.role] || state.me.role), el('span', {}, state.me.email), el('button', { class: 'btn', onclick: () => signOut() }, 'Sign out'));
+  $('who').replaceChildren(...who);
+  $('vabar').hidden = !state.me.viewingAs;
+  if (state.me.viewingAs) $('vabar').replaceChildren('Viewing as ', el('b', {}, state.me.email + ' (' + (ROLE_NAMES[state.me.role] || state.me.role) + ')'), '. This is what they see. It is read-only. ', el('button', { class: 'btn', onclick: () => { state.viewAs = ''; store('viewAs', null); enter().catch((err) => notice(err.message, true)); } }, 'Back to my view'));
   buildNav();
   const wanted = location.hash.slice(1);
-  const first = state.me.isAdmin && state.entry === 'admin' ? 'users' : 'alerts';
-  show(allowedViews().includes(wanted) ? wanted : first);
+  show(allowedViews().includes(wanted) ? wanted : allowedViews().includes('dashboard') ? 'dashboard' : 'alerts');
 }
 
 const NAV = [
+  { v: 'dashboard', label: 'Dashboard', group: 'Workspace', not: ['support_specialist', 'implementation_manager'] },
   { v: 'alerts', label: 'Alerts', group: 'Workspace' },
   { v: 'reports', label: 'Reports', group: 'Workspace' },
   { v: 'cx', label: 'Growth', group: 'Workspace', not: ['support_specialist'] },
@@ -339,7 +336,7 @@ function buildNav() {
   for (const i of navItems()) {
     const g = i.group === 'admin' ? (state.me.isAdmin ? 'Administration' : 'Reference') : i.group;
     if (g !== last) { nav.append(el('div', { class: 'group' }, g)); last = g; }
-    nav.append(el('button', { 'data-view': i.v }, i.label));
+    nav.append(el('button', { 'data-view': i.v }, i.v === 'dashboard' && state.me.role === 'csm' ? 'My portfolio' : i.label));
   }
 }
 
@@ -349,7 +346,7 @@ function show(view) {
   if (location.hash.slice(1) !== view) history.replaceState(null, '', '#' + view);
   document.querySelectorAll('nav button').forEach((b) => b.setAttribute('aria-current', b.dataset.view === view ? 'page' : 'false'));
   for (const v of ALL_VIEWS) $('view-' + v).hidden = v !== view;
-  ({ alerts: loadFlags, rules: loadRules, teams: loadTeams, recon: loadRecon, reports: loadReports, cx: loadCx, support: loadSupport, broadcasts: loadBroadcasts, users: loadUsers })[view]().catch((e) => e.message !== 'unauthorized' && notice(e.message, true));
+  ({ alerts: loadFlags, rules: loadRules, teams: loadTeams, recon: loadRecon, dashboard: loadDashboard, reports: loadReports, cx: loadCx, support: loadSupport, broadcasts: loadBroadcasts, users: loadUsers })[view]().catch((e) => e.message !== 'unauthorized' && notice(e.message, true));
 }
 $('nav').addEventListener('click', (e) => { const b = e.target.closest('button[data-view]'); if (b) show(b.dataset.view); });
 window.addEventListener('hashchange', () => state.me && show(location.hash.slice(1)));

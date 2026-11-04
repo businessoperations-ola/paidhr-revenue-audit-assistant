@@ -22,6 +22,7 @@ import { RulesRepository } from '../audits/rules.repository.js';
 import { FLAG_TITLES } from '../alerts/message-format.js';
 import { APP_CONFIG, type AppConfig } from '../config/config.js';
 import { Database } from '../db/database.js';
+import { OrgService } from '../org/org.service.js';
 import { Public, Roles, type AuthUser } from '../auth/auth.js';
 import { JobRunner, JOB_NAMES, type JobName } from '../jobs/job-runner.js';
 import { todayInLagos } from '../common/calendar.js';
@@ -115,12 +116,13 @@ export class FlagsController {
     @Inject(FlagRepository) private readonly flags: FlagRepository,
     @Inject(Database) private readonly db: Database,
     @Inject(CxService) private readonly cx: CxService,
+    @Inject(OrgService) private readonly org: OrgService,
   ) {}
 
-  /** CSMs only ever see their own portfolio. */
+  /** Everyone sees their own accounts and those of the people under them. Directors and viewers see all. */
   @Get()
   @Roles('csm', ...MANAGERS)
-  list(
+  async list(
     @Req() req: Req,
     @Query('status') status = 'open',
     @Query('type') type?: string,
@@ -128,21 +130,25 @@ export class FlagsController {
     @Query('limit') limit?: string,
     @Query('escalated') escalated?: string,
   ) {
-    const csmEmail = req.user.role === 'csm' ? req.user.email : csm;
-    return this.flags.list({
+    const scope = await this.org.scopeFor(req.user);
+    if (csm && !OrgService.includes(scope, csm)) throw new NotFoundException('Nobody by that email in your team');
+    const all = await this.flags.list({
       status: status === 'all' ? undefined : status,
       type,
-      csmEmail,
+      csmEmail: csm,
       escalated: escalated === 'true',
-      limit: limit ? Number(limit) : undefined,
+      limit: scope.all ? (limit ? Number(limit) : undefined) : 1000,
     });
+    if (scope.all) return all;
+    const mine = all.filter((f) => OrgService.includes(scope, f.csmEmail));
+    return limit ? mine.slice(0, Number(limit)) : mine;
   }
 
   @Get(':id')
   @Roles('csm', ...MANAGERS)
   async get(@Req() req: Req, @Param('id', ParseIntPipe) id: number) {
     const flag = await this.flags.findById(id);
-    if (!flag || (req.user.role === 'csm' && flag.csmEmail !== req.user.email)) throw new NotFoundException();
+    if (!flag || !OrgService.includes(await this.org.scopeFor(req.user), flag.csmEmail)) throw new NotFoundException();
     const { rows: alerts } = await this.db.query(
       'SELECT channel, recipient, kind, status, attempts, error, sent_at FROM alert WHERE flag_id = $1 ORDER BY id',
       [id],
@@ -157,7 +163,7 @@ export class FlagsController {
   @Roles('csm', 'cs_director', 'cs_team_lead')
   async acknowledge(@Req() req: Req, @Param('id', ParseIntPipe) id: number) {
     const flag = await this.flags.findById(id);
-    if (!flag || (req.user.role === 'csm' && flag.csmEmail !== req.user.email)) throw new NotFoundException();
+    if (!flag || !OrgService.includes(await this.org.scopeFor(req.user), flag.csmEmail)) throw new NotFoundException();
     const changed = await this.flags.acknowledge(id, req.user.email);
     if (changed) {
       await this.db.query(
