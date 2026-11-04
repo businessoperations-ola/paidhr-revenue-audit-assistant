@@ -90,9 +90,10 @@ SELECT e.company_id AS client_id, e.occurred_at::date AS activity_date, e.module
   FROM employee_events e
  GROUP BY 1, 2, 3, 4;   -- PLACEHOLDER
 
--- Modules each client has bought.
+-- Modules each client has bought. configured_on is when the module was set up (NULL if it has not been);
+-- it is optional, and without it "is it configured" is treated as unknown.
 CREATE OR REPLACE VIEW audit.v_client_modules AS
-SELECT s.company_id AS client_id, s.module, s.purchased_at::date AS purchased_on
+SELECT s.company_id AS client_id, s.module, s.purchased_at::date AS purchased_on, s.configured_at::date AS configured_on
   FROM company_subscriptions s
  WHERE s.is_active;   -- PLACEHOLDER
 

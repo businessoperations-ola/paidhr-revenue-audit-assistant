@@ -46,9 +46,9 @@ export class AdoptionRepository {
       await c.query('DELETE FROM cp_client_module');
       if (modules.length > 0) {
         await c.query(
-          `INSERT INTO cp_client_module (client_id, module, purchased_on)
-           SELECT DISTINCT ON (client_id, module) * FROM jsonb_to_recordset($1::jsonb) AS x(client_id text, module text, purchased_on date)`,
-          [JSON.stringify(modules.map((m) => ({ client_id: m.clientId, module: m.module, purchased_on: m.purchasedOn })))],
+          `INSERT INTO cp_client_module (client_id, module, purchased_on, configured_on, configured_known)
+           SELECT DISTINCT ON (client_id, module) * FROM jsonb_to_recordset($1::jsonb) AS x(client_id text, module text, purchased_on date, configured_on date, configured_known boolean)`,
+          [JSON.stringify(modules.map((m) => ({ client_id: m.clientId, module: m.module, purchased_on: m.purchasedOn, configured_on: m.configuredOn ?? null, configured_known: m.configuredOn !== undefined })))],
         );
       }
     });

@@ -5,7 +5,7 @@ import { Database } from '../../src/db/database.js';
 import { JobRunner } from '../../src/jobs/job-runner.js';
 import { Outbox, World, apiApp, resetDatabase, testConfig } from './harness.js';
 
-const DAY = '2026-03-10'; // outside every buying season, so seasonality starts at zero
+const DAY = '2026-11-03'; // the day the fixture data is built around
 const daysAgoIso = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString().slice(0, 10);
 const NGOZI = 'ngozi.okafor@example.com';
 const TUNDE = 'tunde.bello@example.com';
@@ -28,6 +28,7 @@ describe('adoption rate, churn and upsell', () => {
     await db.migrate();
     await db.query(`INSERT INTO app_user (email, role) VALUES ('admin@example.com', 'super_admin'), ('director@example.com', 'cs_director'), ('lead@example.com', 'cs_team_lead'), ('${NGOZI}', 'csm'), ('${TUNDE}', 'csm'), ('support@example.com', 'support_specialist')`);
     await db.query(`UPDATE app_user SET manager_email = 'lead@example.com' WHERE role = 'csm'`);
+    await db.query('DELETE FROM module_seasonality'); // start with no buying seasons: each test adds what it needs
     await app.get(JobRunner).run('daily', DAY);
   }
 
@@ -62,7 +63,7 @@ describe('adoption rate, churn and upsell', () => {
     expect(by['Adebayo Logistics'].churn).toMatchObject({ score: 0, level: 'low' });
     expect(by['Lekki Foods'].churn.level).toBe('high'); // dormant admin, detractor-range NPS, late payroll, tickets past SLA
     const why = by['Lekki Foods'].churn.reasons.map((r: { text: string }) => r.text);
-    expect(why).toEqual(expect.arrayContaining(['Primary admin has not logged in for over 30 days', 'NPS is 6 (a detractor)', 'A support ticket is past its SLA', '3 of 4 modules bought are in use (75%)']));
+    expect(why).toEqual(expect.arrayContaining(['Primary admin has not logged in for over 30 days', 'NPS is 6 (a detractor)', 'Renewal is in 58 days, with these risks open', '3 of 4 modules bought are in use (75%)']));
     expect(by['Abuja Tech Hub'].churn.reasons.map((r: { text: string }) => r.text)).toContain('0 of 2 modules bought are in use (0%)');
     // partial churn: the module they may drop even though they stay
     expect(by['Kano Holdings Group'].churn.level).toBe('low');
@@ -93,34 +94,32 @@ describe('adoption rate, churn and upsell', () => {
     expect(opp(lekki, 'TIME').holds.length).toBeGreaterThan(0);
   });
 
-  it('4 seasonality: the same client scores higher in a buying season, and is told when to ask', async () => {
-    const off = opp(await get('/adoption/clients/1001'), 'PERFORMANCE');
-    expect(off.reasons.map((r) => r.text).some((t) => /performance reviews/i.test(t))).toBe(false);
-    expect(off.when).toMatch(/^Next buying season: Jun to Jul|^Start the conversation now: the season opens/);
-    // a snapshot taken in November lands inside the year-end review window
-    world.now = new Date('2026-11-10T12:00:00Z');
-    await app.get(JobRunner).run('ingest', '2026-11-10');
-    const nov = async () => opp((await http().get('/adoption/clients/1001?date=2026-11-10').set(as('director@example.com')).expect(200)).body, 'PERFORMANCE');
-    const inSeason = await nov();
+  it('4 seasonality: a buying season adds its points while it is open, and says when to ask', async () => {
+    const none = opp(await get('/adoption/clients/1001'), 'PERFORMANCE');
+    expect(none.reasons.map((r) => r.text).some((t) => /performance reviews/i.test(t))).toBe(false);
+    expect(none.when).toBeNull();
+    await http().put('/adoption/catalog/seasonality/PERFORMANCE').set(as('director@example.com')).send({ windows: [{ startMonth: 11, endMonth: 12, boost: 20, reason: 'Year-end performance reviews' }, { startMonth: 6, endMonth: 7, boost: 15, reason: 'Mid-year performance reviews' }] }).expect(200);
+    const inSeason = opp(await get('/adoption/clients/1001'), 'PERFORMANCE');
     expect(inSeason.reasons).toContainEqual({ points: 20, text: 'Year-end performance reviews (Nov to Dec)' });
     expect(inSeason.when).toBe('Buying season is open now (Nov to Dec)');
-    // everything else the same, take the seasons away: exactly the boost goes
-    const original = (await http().get('/adoption/catalog').set(as('director@example.com'))).body.windows.filter((w: { module: string }) => w.module === 'PERFORMANCE');
-    await http().put('/adoption/catalog/seasonality/PERFORMANCE').set(as('director@example.com')).send({ windows: [] }).expect(200);
-    expect(inSeason.score - (await nov()).score).toBe(20);
-    expect(original).toHaveLength(2);
+    expect(inSeason.score - none.score).toBe(20);
+    // a season that has not opened yet gives half, in the weeks before it does
+    await http().put('/adoption/catalog/seasonality/PERFORMANCE').set(as('director@example.com')).send({ windows: [{ startMonth: 12, endMonth: 12, boost: 20, reason: 'Festive reviews' }] }).expect(200);
+    const soon = opp(await get('/adoption/clients/1001'), 'PERFORMANCE');
+    expect(soon.reasons).toContainEqual({ points: 10, text: 'Festive reviews starts in 28 days (Dec)' });
+    expect(soon.when).toBe('Start the conversation now: the season opens in 28 days');
   });
 
   it('5 new module launches: set a launch date and every customer that has not bought it sees it', async () => {
     expect(opp(await get('/adoption/clients/1001'), 'PERFORMANCE').isNewLaunch).toBe(false);
     const before = opp(await get('/adoption/clients/1001'), 'PERFORMANCE').score;
-    await http().put('/adoption/catalog/modules/PERFORMANCE').set(as('director@example.com')).send({ launchedOn: '2026-02-20', launchNote: 'with 360 feedback' }).expect(200);
+    await http().put('/adoption/catalog/modules/PERFORMANCE').set(as('director@example.com')).send({ launchedOn: '2026-10-16', launchNote: 'with 360 feedback' }).expect(200);
     const after = opp(await get('/adoption/clients/1001'), 'PERFORMANCE');
     expect(after.isNewLaunch).toBe(true);
     expect(after.score - before).toBe(12);
     expect(after.reasons.map((r) => r.text)).toContain('New module, launched 18 days ago: with 360 feedback');
     const o = await get('/adoption');
-    expect(o.newLaunches).toEqual([{ key: 'PERFORMANCE', label: 'Performance management', launchedOn: '2026-02-20', note: 'with 360 feedback' }]);
+    expect(o.newLaunches).toEqual([{ key: 'PERFORMANCE', label: 'Performance management', launchedOn: '2026-10-16', note: 'with 360 feedback' }]);
     expect(o.opportunities.filter((x: { module: string; isNewLaunch: boolean }) => x.module === 'PERFORMANCE' && x.isNewLaunch).length).toBeGreaterThan(0);
   });
 
@@ -159,7 +158,7 @@ describe('adoption rate, churn and upsell', () => {
   it('lets the Head of CX manage modules and buying seasons, and nobody else', async () => {
     const cat = (await http().get('/adoption/catalog').set(as(NGOZI)).expect(200)).body;
     expect(cat.modules.map((m: { key: string }) => m.key)).toContain('PERFORMANCE');
-    expect(cat.windows.filter((w: { module: string }) => w.module === 'PERFORMANCE')).toHaveLength(2);
+    expect(cat.windows).toEqual([]); // cleared in setup: the shipped seasons are only starting points
     expect(cat.windowsConfirmed).toBe(false);
     expect(cat.scoring.upsell.length).toBeGreaterThan(5);
     await http().put('/adoption/catalog/modules/PERFORMANCE').set(as(NGOZI)).send({ launchedOn: '2026-02-20' }).expect(403);
@@ -174,10 +173,10 @@ describe('adoption rate, churn and upsell', () => {
     expect((await get('/adoption/clients/1001')).opportunities.map((o: { module: string }) => o.module)).not.toContain('BENEFITS');
     // seasons
     await http().put('/adoption/catalog/seasonality/BENEFITS').set(as('director@example.com')).send({ windows: [{ startMonth: 13, endMonth: 2, boost: 10, reason: 'x' }] }).expect(400);
-    const set = await http().put('/adoption/catalog/seasonality/PERFORMANCE').set(as('director@example.com')).send({ windows: [{ startMonth: 3, endMonth: 4, boost: 25, reason: 'Our review cycle' }] }).expect(200);
+    const set = await http().put('/adoption/catalog/seasonality/PERFORMANCE').set(as('director@example.com')).send({ windows: [{ startMonth: 11, endMonth: 12, boost: 25, reason: 'Our review cycle' }] }).expect(200);
     expect(set.body).toHaveLength(1);
     const inSeason = opp(await get('/adoption/clients/1001'), 'PERFORMANCE');
-    expect(inSeason.reasons).toContainEqual({ points: 25, text: 'Our review cycle (Mar to Apr)' });
+    expect(inSeason.reasons).toContainEqual({ points: 25, text: 'Our review cycle (Nov to Dec)' });
     expect((await http().get('/adoption/catalog').set(as(NGOZI))).body.windowsConfirmed).toBe(true);
     expect((await db.query(`SELECT count(*)::int AS n FROM action_log WHERE object_type = 'adoption'`)).rows[0]!.n).toBeGreaterThanOrEqual(3);
   });

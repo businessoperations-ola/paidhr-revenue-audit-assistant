@@ -9,7 +9,10 @@ import type { ControlPanelAccount, HubSpotCompany } from '../domain/types.js';
 import { SnapshotRepository } from '../ingestion/snapshot.repository.js';
 import { OrgService, type Scope } from '../org/org.service.js';
 import { AdoptionCatalogService } from './catalog.service.js';
-import { adoptionRate, churnRisk, csatPct, npsBand, partialChurn, upsellOpportunities, type ClientFacts, type ModuleFact, type Opportunity, type Scales } from './intelligence.js';
+import { adoptionRate, churnRisk, csatPct, npsBand, partialChurn, upsellOpportunities, type ClientFacts, type ModuleFact, type Scales } from './intelligence.js';
+import { DEFAULT_SCORING, type ScoringConfig } from './scoring-config.js';
+import { AdoptionSettingsService } from './settings.service.js';
+import { evaluateUsage, usageRuleFor, validateUsageRule, WINDOWS, type CriterionResult, type EventWindow, type UsageEvidence, type UsageRule, type Window } from './usage.js';
 import { HEADLINE_EVENTS, eventLabel } from './modules.js';
 import { slaFor, slaRulesFrom, type SlaResult } from './sla.js';
 
@@ -44,6 +47,9 @@ export interface ModuleRow {
   eventsPrior30: number;
   lastActive: IsoDate | null;
   purchasedOn: IsoDate | null;
+  /** How the usage rule combines its criteria, and what each one found. */
+  mode: 'ANY' | 'ALL';
+  criteria: CriterionResult[];
 }
 
 export interface MatrixRow {
@@ -96,6 +102,7 @@ const pctChange = (now: number, before: number): number | null => (before > 0 ? 
 const num = (v: unknown) => Number(v ?? 0);
 const isoOf = (d: Date | string | null): string | null => (d === null ? null : d instanceof Date ? d.toISOString() : String(d));
 
+interface ActivityWindowRow { client_id: string; module: string; event_type: string; last_date: IsoDate | null; [k: string]: string | number | null }
 interface ActivityAgg { client_id: string; module: string; event_type: string; last30: string; prior30: string; last_date: IsoDate | null }
 
 /** Product adoption for every client in a person's scope: admins, employees, support and modules. */
@@ -107,6 +114,7 @@ export class AdoptionService {
     @Inject(FlagRepository) private readonly flags: FlagRepository,
     @Inject(RulesRepository) private readonly rules: RulesRepository,
     @Inject(AdoptionCatalogService) private readonly catalog: AdoptionCatalogService,
+    @Inject(AdoptionSettingsService) private readonly settings: AdoptionSettingsService,
     @Inject(APP_CONFIG) private readonly cfg: AppConfig,
   ) {}
 
@@ -120,7 +128,7 @@ export class AdoptionService {
     const uctx = this.upsellContext(ctx);
     const assessed = new Map(inScope.map((c) => [c.hubspotId, this.assess(ctx, c, uctx)]));
     const clients = inScope.map((c) => assessed.get(c.hubspotId)!.summary);
-    const opportunities = inScope.flatMap((c) => assessed.get(c.hubspotId)!.opps.filter((o) => o.score >= 20).map((o) => ({
+    const opportunities = inScope.flatMap((c) => assessed.get(c.hubspotId)!.opps.filter((o) => o.score >= ctx.scoring.upsell.cool).map((o) => ({
       hubspotId: c.hubspotId, client: c.name, csmName: c.csmName, arrKobo: c.arrKobo, module: o.module, label: o.label, score: o.score, band: o.band,
       held: o.holds.length > 0, holds: o.holds, isNewLaunch: o.isNewLaunch, when: o.when, reasons: o.reasons.slice(0, 5),
     }))).sort((a, b) => b.score - a.score);
@@ -180,6 +188,29 @@ export class AdoptionService {
     };
   }
 
+  // ------------------------------------------------------------------ trying a usage rule before saving it
+
+  /** How many clients would be counted as using a module under a draft rule, against the saved one. */
+  async previewUsage(module: string, input: unknown, date: IsoDate) {
+    const v = validateUsageRule(input);
+    if (!v.ok) return { errors: v.errors };
+    const ctx = await this.context(date);
+    if (!ctx) return null;
+    const changes: Array<{ hubspotId: string; name: string; now: boolean; draft: boolean; why: string }> = [];
+    let bought = 0, now = 0, draft = 0;
+    for (const c of ctx.companies) {
+      const current = this.moduleRows(ctx, c).find((m) => m.key === module);
+      if (!current || current.status === 'not_purchased') continue;
+      const proposed = this.moduleRows(ctx, c, { module, rule: v.rule }).find((m) => m.key === module)!;
+      bought += 1;
+      const a = current.status === 'in_use', b = proposed.status === 'in_use';
+      if (a) now += 1;
+      if (b) draft += 1;
+      if (a !== b) changes.push({ hubspotId: c.hubspotId, name: c.name, now: a, draft: b, why: (proposed.criteria.find((r) => r.state === (b ? 'met' : 'not_met')) ?? proposed.criteria[0])?.detail ?? '' });
+    }
+    return { errors: [] as string[], bought, inUseNow: now, inUseDraft: draft, changes: changes.slice(0, 20), totalChanges: changes.length };
+  }
+
   // ------------------------------------------------------------------ loading
 
   private async context(date: IsoDate) {
@@ -187,7 +218,11 @@ export class AdoptionService {
     if (!asOf) return null;
     const d30 = addDays(asOf, -30);
     const d60 = addDays(asOf, -60);
-    const [catalog, windows, signals, companies, accounts, rules, flags, admins, activity, daily, modules, tickets] = await Promise.all([
+    const winSums = WINDOWS.map((w) => `COALESCE(sum(events) FILTER (WHERE activity_date > $1::date - ${w}), 0)::bigint AS e${w}, COALESCE(max(active_employees) FILTER (WHERE activity_date > $1::date - ${w}), 0)::int AS a${w}`).join(', ');
+    const [scoring, usageRules, activityWin, catalog, windows, signals, companies, accounts, rules, flags, admins, activity, daily, modules, tickets] = await Promise.all([
+      this.settings.scoring(),
+      this.settings.usageRules(),
+      this.db.query<ActivityWindowRow>(`SELECT client_id, module, event_type, max(activity_date) AS last_date, ${winSums} FROM cp_employee_activity WHERE activity_date > $1::date - 90 AND activity_date <= $1 GROUP BY client_id, module, event_type`, [asOf]),
       this.catalog.modules(),
       this.catalog.windows(),
       this.catalog.signals(),
@@ -209,7 +244,7 @@ export class AdoptionService {
           WHERE event_type = 'SIGN_IN' AND activity_date > $2 AND activity_date <= $1 GROUP BY client_id, activity_date`,
         [asOf, d30],
       ),
-      this.db.query<{ client_id: string; module: string; purchased_on: IsoDate | null }>('SELECT client_id, module, purchased_on FROM cp_client_module'),
+      this.db.query<{ client_id: string; module: string; purchased_on: IsoDate | null; configured_on: IsoDate | null; configured_known: boolean }>('SELECT client_id, module, purchased_on, configured_on, configured_known FROM cp_client_module'),
       this.db.query<{ ticket_id: string; hubspot_company_id: string; priority: string | null; created_at: Date; first_response_at: Date | null; closed_at: Date | null; is_closed: boolean; reopen_count: number }>(
         `SELECT ticket_id, hubspot_company_id, priority, created_at, first_response_at, closed_at, is_closed, reopen_count FROM ticket WHERE hubspot_company_id IS NOT NULL AND (NOT is_closed OR created_at > now() - interval '90 days')`,
       ),
@@ -217,11 +252,15 @@ export class AdoptionService {
     const members = rootMembers(accounts);
     const accountsById = new Map(accounts.map((a) => [a.clientId, a]));
     const moduleRows = new Map<string, Map<string, IsoDate | null>>();
-    for (const m of modules.rows) moduleRows.set(m.client_id, (moduleRows.get(m.client_id) ?? new Map()).set(m.module, m.purchased_on));
+    const configured = new Map<string, Map<string, 'yes' | 'no' | 'unknown'>>();
+    for (const m of modules.rows) {
+      moduleRows.set(m.client_id, (moduleRows.get(m.client_id) ?? new Map()).set(m.module, m.purchased_on));
+      configured.set(m.client_id, (configured.get(m.client_id) ?? new Map()).set(m.module, !m.configured_known ? 'unknown' : m.configured_on ? 'yes' : 'no'));
+    }
     const slaRules = slaRulesFrom(rules);
     const now = new Date();
     const scales: Scales = { npsScale: this.cfg.NPS_SCALE, csatMax: this.cfg.CSAT_SCALE_MAX };
-    return { asOf, today: new Date(`${asOf}T00:00:00Z`), catalog, windows, signals, scales, companies, accounts, accountsById, members, rules, slaRules, now, flags, admins: admins.rows, activity: activity.rows, daily: daily.rows, moduleRows, tickets: tickets.rows };
+    return { asOf, today: new Date(`${asOf}T00:00:00Z`), scoring, usageRules, activityWin: activityWin.rows, configured, catalog, windows, signals, scales, companies, accounts, accountsById, members, rules, slaRules, now, flags, admins: admins.rows, activity: activity.rows, daily: daily.rows, moduleRows, tickets: tickets.rows };
   }
 
   private clientIds(ctx: NonNullable<Awaited<ReturnType<AdoptionService['context']>>>, c: HubSpotCompany): string[] {
@@ -311,24 +350,55 @@ export class AdoptionService {
     };
   }
 
-  private moduleRows(ctx: Ctx, c: HubSpotCompany): ModuleRow[] {
+  /** Everything the usage criteria may look at, for one client. */
+  private evidence(ctx: Ctx, c: HubSpotCompany, module: string): UsageEvidence {
+    const ids = this.clientIds(ctx, c);
+    const acc = (c.controlPanelId ? ctx.members.get(c.controlPanelId) : undefined) ?? [];
+    const rows = ctx.activityWin.filter((r) => ids.includes(r.client_id));
+    const window = (match: (r: ActivityWindowRow) => boolean, days: Window): EventWindow => {
+      const hit = rows.filter(match);
+      const perClient = new Map<string, number>();
+      for (const r of hit) perClient.set(r.client_id, Math.max(perClient.get(r.client_id) ?? 0, num(r[`a${days}`])));
+      const used = hit.filter((r) => num(r[`e${days}`]) > 0);
+      return { events: hit.reduce((n, r) => n + num(r[`e${days}`]), 0), maxActive: [...perClient.values()].reduce((n, v) => n + v, 0), last: used.map((r) => r.last_date).filter((d): d is IsoDate => d !== null).sort().at(-1) ?? null };
+    };
+    const latest = (xs: Array<IsoDate | null>) => xs.reduce<IsoDate | null>((m, x) => (x && (!m || x > m) ? x : m), null);
+    let configured: 'yes' | 'no' | 'unknown' = 'unknown';
+    for (const id of ids) { const v = ctx.configured.get(id)?.get(module); if (v === 'yes') configured = 'yes'; else if (v === 'no' && configured === 'unknown') configured = 'no'; }
+    if (configured === 'unknown' && module === 'PAYROLL' && acc.length > 0) configured = acc.some((a) => a.payFrequency !== null) ? 'yes' : 'no';
+    return {
+      asOf: ctx.asOf,
+      configured,
+      events: (types, days) => window((r) => (types.length > 0 ? types.includes(r.event_type) : r.module === module), days),
+      signIns: (days) => window((r) => r.event_type === 'SIGN_IN', days),
+      adminLogins: ctx.admins.filter((a) => ids.includes(a.client_id)).map((a) => {
+        const last = isoOf(a.last_login_at);
+        return { level: a.level, daysSince: last ? Math.max(0, daysBetween(last.slice(0, 10), ctx.asOf)) : null };
+      }),
+      lastPayrollRun: latest(acc.map((a) => a.lastPayrollPayDate)),
+      payScheduleExists: acc.length === 0 ? null : acc.some((a) => a.payFrequency !== null),
+      lastUsed: { ewa: latest(acc.map((a) => a.ewaLastUsedOn)), statutory: latest(acc.map((a) => a.statutoryLastUsedOn)) },
+    };
+  }
+
+  private moduleRows(ctx: Ctx, c: HubSpotCompany, ruleOverride?: { module: string; rule: UsageRule }): ModuleRow[] {
     const ids = this.clientIds(ctx, c);
     const bought = new Map<string, IsoDate | null>();
     for (const id of ids) for (const [m, on] of ctx.moduleRows.get(id) ?? []) bought.set(m, on);
     const acc = (c.controlPanelId ? ctx.members.get(c.controlPanelId) : undefined) ?? [];
-    const within = (d: IsoDate | null, days: number) => d !== null && daysBetween(d, ctx.asOf) <= days;
     const latest = (xs: Array<IsoDate | null>) => xs.reduce<IsoDate | null>((m, x) => (x && (!m || x > m) ? x : m), null);
     return ctx.catalog.filter((m) => m.active).map(({ key, label }) => {
       const rows = ctx.activity.filter((r) => ids.includes(r.client_id) && r.module === key);
       const events30 = rows.reduce((n, r) => n + num(r.last30), 0);
       let last = latest(rows.map((r) => r.last_date));
-      let used = events30 > 0;
-      if (key === 'PAYROLL') { const d = latest(acc.map((a) => a.lastPayrollPayDate)); last = latest([last, d]); used = used || within(d, 45); }
-      if (key === 'EWA') { const d = latest(acc.map((a) => a.ewaLastUsedOn)); last = latest([last, d]); used = used || within(d, 30); }
-      if (key === 'STATUTORY') { const d = latest(acc.map((a) => a.statutoryLastUsedOn)); last = latest([last, d]); used = used || within(d, 60); }
+      if (key === 'PAYROLL') last = latest([last, ...acc.map((a) => a.lastPayrollPayDate)]);
+      if (key === 'EWA') last = latest([last, ...acc.map((a) => a.ewaLastUsedOn)]);
+      if (key === 'STATUTORY') last = latest([last, ...acc.map((a) => a.statutoryLastUsedOn)]);
       const has = bought.has(key);
+      const rule = ruleOverride && ruleOverride.module === key ? ruleOverride.rule : usageRuleFor(key, ctx.usageRules);
+      const verdict = has ? evaluateUsage(rule, this.evidence(ctx, c, key)) : null;
       const prior30 = rows.reduce((n, r) => n + num(r.prior30), 0);
-      return { key, label, status: !has ? 'not_purchased' : used ? 'in_use' : 'unused', events30, eventsPrior30: prior30, lastActive: last, purchasedOn: bought.get(key) ?? null } satisfies ModuleRow;
+      return { key, label, status: !has ? 'not_purchased' : verdict!.inUse ? 'in_use' : 'unused', events30, eventsPrior30: prior30, lastActive: last, purchasedOn: bought.get(key) ?? null, mode: rule.mode, criteria: verdict?.results ?? [] } satisfies ModuleRow;
     });
   }
 
@@ -374,7 +444,7 @@ export class AdoptionService {
   private upsellContext(ctx: Ctx): UpsellContextLite {
     return {
       catalog: ctx.catalog, windows: ctx.windows, peerPct: this.peerShares(ctx), today: ctx.today,
-      launchDays: ctx.rules.upsell_launch_days, lookaheadDays: ctx.rules.upsell_season_lookahead_days, signalDays: 180,
+      launchDays: ctx.rules.upsell_launch_days, lookaheadDays: ctx.rules.upsell_season_lookahead_days,
     };
   }
 
@@ -416,10 +486,10 @@ export class AdoptionService {
     const base = this.baseSummary(ctx, c);
     const f = this.facts(ctx, c, base);
     const known = base.modules.known;
-    const risk = churnRisk(f, ctx.scales);
-    const partial = partialChurn(f, ctx.scales);
-    const opps = known ? upsellOpportunities(f, ctx.scales, uctx, risk) : [];
-    const rate = adoptionRate(f.modules);
+    const risk = churnRisk(f, ctx.scales, ctx.scoring);
+    const partial = partialChurn(f, ctx.scales, ctx.scoring);
+    const opps = known ? upsellOpportunities(f, ctx.scales, uctx, risk, ctx.scoring) : [];
+    const rate = adoptionRate(f.modules, ctx.scoring);
     const summary: ClientAdoptionSummary = {
       ...base,
       adoption: { purchased: rate.purchased, inUse: rate.inUse, unused: rate.unused, ratePct: rate.ratePct, band: rate.band },

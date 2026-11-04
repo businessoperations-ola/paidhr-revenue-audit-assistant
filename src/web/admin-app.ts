@@ -326,6 +326,7 @@ const NAV = [
   { v: 'rules', label: 'Rules', group: 'admin', also: ['cs_team_lead', 'viewer'] },
   { v: 'teams', label: 'Team leads', group: 'admin', also: ['cs_team_lead', 'viewer'] },
   { v: 'recon', label: 'Reconciliation', group: 'admin', also: ['cs_team_lead', 'viewer'] },
+  { v: 'adoptionsettings', label: 'Adoption criteria', group: 'admin' },
   { v: 'catalog', label: 'Modules and seasons', group: 'admin' },
   { v: 'broadcasts', label: 'Broadcasts', group: 'admin' },
   { v: 'users', label: 'Users', group: 'admin' },
@@ -351,7 +352,7 @@ function show(view) {
   if (location.hash.slice(1) !== view) history.replaceState(null, '', '#' + view);
   document.querySelectorAll('nav button').forEach((b) => b.setAttribute('aria-current', b.dataset.view === view ? 'page' : 'false'));
   for (const v of ALL_VIEWS) $('view-' + v).hidden = v !== view;
-  ({ alerts: loadFlags, rules: loadRules, teams: loadTeams, recon: loadRecon, dashboard: loadDashboard, adoption: loadAdoption, churn: loadChurn, upsell: loadUpsell, signals: loadSignals, catalog: loadCatalog, reports: loadReports, cx: loadCx, support: loadSupport, broadcasts: loadBroadcasts, users: loadUsers })[view]().catch((e) => e.message !== 'unauthorized' && notice(e.message, true));
+  ({ alerts: loadFlags, rules: loadRules, teams: loadTeams, recon: loadRecon, dashboard: loadDashboard, adoption: loadAdoption, churn: loadChurn, upsell: loadUpsell, signals: loadSignals, catalog: loadCatalog, adoptionsettings: loadAdoptionSettings, reports: loadReports, cx: loadCx, support: loadSupport, broadcasts: loadBroadcasts, users: loadUsers })[view]().catch((e) => e.message !== 'unauthorized' && notice(e.message, true));
 }
 $('nav').addEventListener('click', (e) => { const b = e.target.closest('button[data-view]'); if (b) show(b.dataset.view); });
 window.addEventListener('hashchange', () => state.me && show(location.hash.slice(1)));

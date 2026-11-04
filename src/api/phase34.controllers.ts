@@ -21,7 +21,8 @@ import { BroadcastService } from '../broadcasts/broadcast.service.js';
 import { todayInLagos, type IsoDate } from '../common/calendar.js';
 import { AdoptionService } from '../adoption/adoption.service.js';
 import { AdoptionCatalogService } from '../adoption/catalog.service.js';
-import { SCORING_NOTES } from '../adoption/intelligence.js';
+import { describeScoring } from '../adoption/scoring-notes.js';
+import { AdoptionSettingsService } from '../adoption/settings.service.js';
 import { CxService } from '../cx/cx.service.js';
 import { OrgService } from '../org/org.service.js';
 import { PortfolioService } from '../portfolio/portfolio.service.js';
@@ -361,6 +362,7 @@ export class AdoptionSetupController {
   constructor(
     @Inject(AdoptionService) private readonly adoption: AdoptionService,
     @Inject(AdoptionCatalogService) private readonly catalog: AdoptionCatalogService,
+    @Inject(AdoptionSettingsService) private readonly settings: AdoptionSettingsService,
     @Inject(SnapshotRepository) private readonly snapshots: SnapshotRepository,
     @Inject(OrgService) private readonly org: OrgService,
   ) {}
@@ -369,7 +371,7 @@ export class AdoptionSetupController {
   @Get('catalog')
   @Roles('csm', ...MANAGERS)
   async get() {
-    return { modules: await this.catalog.modules(), windows: await this.catalog.windows(), windowsConfirmed: await this.catalog.windowsConfirmed(), scoring: SCORING_NOTES };
+    return { modules: await this.catalog.modules(), windows: await this.catalog.windows(), windowsConfirmed: await this.catalog.windowsConfirmed(), scoring: describeScoring(await this.settings.scoring()) };
   }
 
   @Put('catalog/modules/:key')
@@ -388,6 +390,56 @@ export class AdoptionSetupController {
   @Roles('cs_director')
   setWindows(@Req() req: Req, @Param('module') module: string, @Body() body: { windows?: unknown }) {
     return this.catalog.setWindows(module, body?.windows, req.user.email);
+  }
+
+  // ------------------------------------------------------------------ adoption settings (Head of CX)
+
+  /** Everything configurable about adoption, churn and upsell, with the built-in defaults beside it. */
+  @Get('settings')
+  @Roles('cs_director')
+  getSettings() {
+    return this.settings.overview();
+  }
+
+  @Put('settings/scoring')
+  @Roles('cs_director')
+  async saveScoring(@Req() req: Req, @Body() body: unknown) {
+    await this.settings.saveScoring(body, req.user.email);
+    return this.settings.overview();
+  }
+
+  @Post('settings/scoring/reset')
+  @HttpCode(200)
+  @Roles('cs_director')
+  async resetScoring(@Req() req: Req) {
+    await this.settings.resetScoring(req.user.email);
+    return this.settings.overview();
+  }
+
+  @Put('settings/usage/:module')
+  @Roles('cs_director')
+  async saveUsage(@Req() req: Req, @Param('module') module: string, @Body() body: unknown) {
+    await this.settings.saveUsageRule(module, body, req.user.email);
+    return this.settings.overview();
+  }
+
+  @Post('settings/usage/:module/reset')
+  @HttpCode(200)
+  @Roles('cs_director')
+  async resetUsage(@Req() req: Req, @Param('module') module: string) {
+    await this.settings.resetUsageRule(module, req.user.email);
+    return this.settings.overview();
+  }
+
+  /** Try a draft rule: how many clients would count as using the module, against the saved rule. */
+  @Post('settings/usage/:module/preview')
+  @HttpCode(200)
+  @Roles('cs_director')
+  async previewUsage(@Param('module') module: string, @Body() body: unknown, @Query('date') date?: string) {
+    const r = await this.adoption.previewUsage(module, body, dateParam(date));
+    if (!r) throw new NotFoundException('No data has been loaded yet');
+    if (r.errors.length) throw new BadRequestException(r.errors.join('. '));
+    return r;
   }
 
   // ------------------------------------------------------------------ growth signals
