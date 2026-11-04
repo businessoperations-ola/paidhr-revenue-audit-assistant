@@ -358,15 +358,18 @@ describe('phase 3 API', () => {
     const own = await http().get('/reports/preview?audience=csm&cadence=weekly&date=2026-11-10').set(as('ngozi.okafor@example.com')).expect(200);
     expect(JSON.stringify(own.body)).toContain('Adebayo Logistics');
     expect(JSON.stringify(own.body)).not.toContain('Kano Holdings');
-    // Asking for a colleague's portfolio with ?csm= does not work for a CSM: they always get their own.
-    const spoof = await http().get('/reports/preview?audience=csm&cadence=weekly&date=2026-11-10&csm=tunde.bello@example.com').set(as('ngozi.okafor@example.com')).expect(200);
-    expect(JSON.stringify(spoof.body)).not.toContain('Kano Holdings');
+    // Asking for a colleague's portfolio with ?csm= is refused for a CSM who has nobody under them.
+    await http().get('/reports/preview?audience=csm&cadence=weekly&date=2026-11-10&csm=tunde.bello@example.com').set(as('ngozi.okafor@example.com')).expect(404);
     await http().get('/reports/preview?audience=executive&cadence=weekly&date=2026-11-10').set(as('ngozi.okafor@example.com')).expect(403);
     await http().get('/reports/preview?audience=support&cadence=weekly&date=2026-11-10').set(as('support@example.com')).expect(200);
     await http().get('/reports/preview?audience=executive&cadence=weekly&date=2026-11-10').set(as('support@example.com')).expect(403);
     const exec = await http().get('/reports/preview?audience=executive&cadence=weekly&date=2026-11-10').set(as('director@example.com')).expect(200);
     expect(exec.body.sections[0].items[0].value).toBe('₦6,290,000.00');
-    await http().get('/reports/preview?audience=csm&cadence=weekly').set(as('director@example.com')).expect(400);
+    // Without ?csm= a director gets the team report: everyone, one row each.
+    const team = await http().get('/reports/preview?audience=csm&cadence=weekly&date=2026-11-10').set(as('director@example.com')).expect(200);
+    expect(team.body.title).toBe('Weekly team report');
+    expect(JSON.stringify(team.body)).toContain('Kano Holdings');
+    expect(JSON.stringify(team.body)).toContain('Adebayo Logistics');
     const forTunde = await http().get('/reports/preview?audience=csm&cadence=weekly&date=2026-11-10&csm=tunde.bello@example.com').set(as('director@example.com')).expect(200);
     expect(JSON.stringify(forTunde.body)).toContain('Kano Holdings');
     await http().get('/reports/preview?audience=bogus').set(as('director@example.com')).expect(400);

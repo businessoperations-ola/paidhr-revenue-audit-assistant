@@ -1,4 +1,4 @@
--- Contract between the Control Panel database and the Audit Assistant.
+-- Contract between the Control Panel database and Oyela.
 --
 -- The Control Panel team owns this file and the view behind it. The Audit
 -- Assistant only ever runs `SELECT ... FROM audit.v_accounts` through a
@@ -19,7 +19,7 @@ SELECT
   ps.pay_day                   AS pay_day,            -- monthly: day of month (1-31); else NULL
   lr.pay_date                  AS last_payroll_pay_date,      -- pay date of the latest COMPLETED run
   lr.completed_at              AS last_payroll_completed_at,  -- when that run completed
-  -- Added in phase 3/4. If these columns are missing the Audit Assistant still runs, without
+  -- Added in phase 3/4. If these columns are missing Oyela still runs, without
   -- onboarding, module-adoption and expansion-radar features.
   c.created_at::date           AS created_on,                 -- sign-up date
   ps.created_at::date          AS payroll_configured_on,      -- when a pay schedule was first set up (NULL if never)
@@ -63,7 +63,7 @@ SELECT i.company_id AS client_id, i.invoice_date AS revenue_date,
 CREATE OR REPLACE VIEW audit.v_admin_users AS
 SELECT u.email FROM users u WHERE u.is_admin AND u.is_active;  -- PLACEHOLDER
 
--- Read-only login used by the Audit Assistant.
+-- Read-only login used by Oyela.
 -- CREATE ROLE audit_reader LOGIN PASSWORD '<from Key Vault>';
 -- GRANT USAGE ON SCHEMA audit TO audit_reader;
 -- GRANT SELECT ON audit.v_accounts, audit.v_revenue_lines, audit.v_admin_users TO audit_reader;

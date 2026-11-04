@@ -19,6 +19,8 @@ import { Roles, type AuthUser } from '../auth/auth.js';
 import { BroadcastService } from '../broadcasts/broadcast.service.js';
 import { todayInLagos, type IsoDate } from '../common/calendar.js';
 import { CxService } from '../cx/cx.service.js';
+import { OrgService } from '../org/org.service.js';
+import { PortfolioService } from '../portfolio/portfolio.service.js';
 import { SnapshotRepository } from '../ingestion/snapshot.repository.js';
 import { ReportBuilder } from '../reports/report-builder.js';
 import { ReportService } from '../reports/report.service.js';
@@ -84,6 +86,7 @@ export class ReportScheduleController {
   constructor(
     @Inject(ReportBuilder) private readonly builder: ReportBuilder,
     @Inject(ReportService) private readonly reports: ReportService,
+    @Inject(OrgService) private readonly org: OrgService,
   ) {}
 
   @Get('schedules')
@@ -112,9 +115,22 @@ export class ReportScheduleController {
     if (!CADENCES.includes(cadence as Cadence)) throw new BadRequestException(`cadence must be one of: ${CADENCES.join(', ')}`);
     const allowed = req.user.role === 'super_admin' ? AUDIENCES : (REPORT_ACCESS[req.user.role] ?? []);
     if (!allowed.includes(audience as Audience)) throw new ForbiddenException('Your role cannot view this report');
-    const csmEmail = audience === 'csm' ? (req.user.role === 'csm' ? req.user.email : csm) : undefined;
-    if (audience === 'csm' && !csmEmail) throw new BadRequestException('Add ?csm=<email> to preview a CSM report');
-    const report = await this.builder.build(audience as Audience, cadence as Cadence, dateParam(date), csmEmail);
+    let who: string | { emails: string[]; label: string } | undefined;
+    if (audience === 'csm') {
+      // A person's own portfolio (?csm=<email>), or their whole team: everyone under them, or everyone for a director.
+      const scope = await this.org.scopeFor(req.user);
+      if (csm) {
+        if (!OrgService.includes(scope, csm)) throw new NotFoundException('Nobody by that email in your team');
+        who = csm;
+      } else if (req.user.role === 'csm' && scope.emails.size <= 1) {
+        who = req.user.email;
+      } else {
+        const csms = (await this.org.csmsIn(scope)).map((u) => u.email);
+        if (csms.length === 0) throw new BadRequestException('There are no CSMs in your team yet');
+        who = { emails: csms, label: scope.all ? 'all CSMs' : 'your team' };
+      }
+    }
+    const report = await this.builder.build(audience as Audience, cadence as Cadence, dateParam(date), who);
     if (!report) throw new NotFoundException('No data has been loaded yet');
     return report;
   }
@@ -127,6 +143,7 @@ export class CxController {
   constructor(
     @Inject(CxService) private readonly cx: CxService,
     @Inject(SnapshotRepository) private readonly snapshots: SnapshotRepository,
+    @Inject(OrgService) private readonly org: OrgService,
   ) {}
 
   /** US-27: expansion radar. A CSM sees only their own accounts. */
@@ -135,7 +152,8 @@ export class CxController {
   async radar(@Req() req: Req, @Query('date') date?: string) {
     const r = await this.cx.radar(dateParam(date));
     if (!r) throw new NotFoundException('No data has been loaded yet');
-    return req.user.role === 'csm' ? { ...r, entries: r.entries.filter((e) => e.csmEmail === req.user.email) } : r;
+    const scope = await this.org.scopeFor(req.user);
+    return scope.all ? r : { ...r, entries: r.entries.filter((e) => OrgService.includes(scope, e.csmEmail)) };
   }
 
   /** US-26: first-90-day scorecard. */
@@ -184,7 +202,7 @@ export class CxController {
   private async ownAccount(user: AuthUser, hubspotId: string): Promise<void> {
     const asOf = await this.snapshots.latestSnapshotDate(todayInLagos());
     const company = asOf ? (await this.snapshots.loadCompanies(asOf)).find((c) => c.hubspotId === hubspotId) : undefined;
-    if (!company || (user.role === 'csm' && company.csmEmail !== user.email)) throw new NotFoundException('Account not found');
+    if (!company || !OrgService.includes(await this.org.scopeFor(user), company.csmEmail)) throw new NotFoundException('Account not found');
   }
 }
 
@@ -265,5 +283,41 @@ export class BroadcastController {
   @Roles('cs_director')
   runs(@Req() req: Req, @Param('id', ParseIntPipe) id: number) {
     return this.broadcasts.runs(id, req.user);
+  }
+}
+
+// ====================================================================== the CSM dashboard
+
+@Controller('portfolio')
+export class PortfolioController {
+  constructor(
+    @Inject(PortfolioService) private readonly portfolio: PortfolioService,
+    @Inject(OrgService) private readonly org: OrgService,
+  ) {}
+
+  /** Every client in your scope with the numbers that matter. `?csm=` narrows to one person under you. */
+  @Get()
+  @Roles('csm', ...MANAGERS)
+  async dashboard(@Req() req: Req, @Query('csm') csm?: string, @Query('date') date?: string) {
+    const scope = await this.org.scopeFor(req.user);
+    if (csm && !OrgService.includes(scope, csm)) throw new NotFoundException('Nobody by that email in your team');
+    const d = await this.portfolio.dashboard(scope, dateParam(date), csm);
+    if (!d) throw new NotFoundException('No data has been loaded yet');
+    return { ...d, people: (await this.org.csmsIn(scope)).map((u) => ({ email: u.email, name: u.name })) };
+  }
+
+  /** The CSMs in your scope, for pickers. */
+  @Get('people')
+  @Roles('csm', ...MANAGERS)
+  async people(@Req() req: Req) {
+    return (await this.org.csmsIn(await this.org.scopeFor(req.user))).map((u) => ({ email: u.email, name: u.name }));
+  }
+
+  @Get('clients/:hubspotId')
+  @Roles('csm', ...MANAGERS)
+  async client(@Req() req: Req, @Param('hubspotId') hubspotId: string, @Query('date') date?: string) {
+    const c = await this.portfolio.client(await this.org.scopeFor(req.user), dateParam(date), hubspotId);
+    if (!c) throw new NotFoundException('Client not found');
+    return c;
   }
 }

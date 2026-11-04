@@ -24,6 +24,8 @@ export type Role =
 export interface AuthUser {
   email: string;
   role: Role;
+  /** Set when a super admin is looking at the app as someone else. This is who they really are. */
+  actualUser?: { email: string; role: Role };
 }
 
 export const ROLES_KEY = 'roles';
@@ -88,11 +90,20 @@ export class AuthGuard implements CanActivate {
         throw new UnauthorizedException('Invalid Google ID token');
       }
       const { rows } = await this.db.query<{ role: Role; active: boolean }>('SELECT role, active FROM app_user WHERE email = $1', [email]);
-      if (!rows[0]) throw new ForbiddenException(`${email} has no access to the Audit Assistant`);
+      if (!rows[0]) throw new ForbiddenException(`${email} has no access to Oyela`);
       if (!rows[0].active) throw new ForbiddenException(`${email} has been deactivated. Ask an admin to restore access.`);
       // Record sign-ins at most once an hour, so this is not a write on every request.
       await this.db.query(`UPDATE app_user SET last_seen_at = now() WHERE email = $1 AND (last_seen_at IS NULL OR last_seen_at < now() - interval '1 hour')`, [email]);
       user = { email, role: rows[0].role };
+    }
+    // A super admin can look at the app as another person. It is read-only, and every route
+    // sees the other person's role and data, so what they see is exactly what that person sees.
+    const viewAs = req.headers['x-view-as'];
+    if (typeof viewAs === 'string' && viewAs && viewAs.toLowerCase() !== user.email && user.role === 'super_admin') {
+      const { rows } = await this.db.query<{ role: Role }>('SELECT role FROM app_user WHERE email = $1 AND active', [viewAs.toLowerCase()]);
+      if (!rows[0]) throw new ForbiddenException('That person is not an active user');
+      if (req.method !== 'GET' && req.method !== 'HEAD') throw new ForbiddenException('You are viewing as someone else, which is read-only. Switch back to your own view to make changes.');
+      user = { email: viewAs.toLowerCase(), role: rows[0].role, actualUser: { email: user.email, role: user.role } };
     }
     req.user = user;
 

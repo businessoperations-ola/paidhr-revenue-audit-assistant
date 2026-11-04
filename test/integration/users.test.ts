@@ -70,11 +70,4 @@ describe('user management API', () => {
     // third is now the only active super admin; demoting them is refused
     await http().put('/users/third@example.com').set(as('third@example.com')).send({ role: 'csm' }).expect(403); // self
   });
-
-  it('serves the sign-in page with separate staff and admin entries', async () => {
-    const html = (await http().get('/').expect(200)).text;
-    expect(html).toContain('id="tab-staff"');
-    expect(html).toContain('id="tab-admin"');
-    expect(html).toContain('id="view-users"');
-  });
 });

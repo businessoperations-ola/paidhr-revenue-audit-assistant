@@ -3,6 +3,7 @@ import { logoUrl } from '../alerts/ack-link.js';
 import { ALERT_SENDERS, type AlertSenders } from '../alerts/channels/channels.js';
 import { dayOfWeek, type IsoDate } from '../common/calendar.js';
 import { APP_CONFIG, type AppConfig } from '../config/config.js';
+import { OrgService } from '../org/org.service.js';
 import { Database } from '../db/database.js';
 import { ReportBuilder } from './report-builder.js';
 import { reportChat, reportHtml, reportText } from './report-format.js';
@@ -49,6 +50,7 @@ export class ReportService {
     @Inject(Database) private readonly db: Database,
     @Inject(ReportBuilder) private readonly builder: ReportBuilder,
     @Inject(ALERT_SENDERS) private readonly senders: AlertSenders,
+    @Inject(OrgService) private readonly org: OrgService,
   ) {}
 
   async schedules(): Promise<ReportScheduleRow[]> {
@@ -99,6 +101,13 @@ export class ReportService {
       const users = await this.recipients(s.audience);
       if (s.audience === 'csm') {
         for (const email of users) await this.deliverEmail(s, date, email, result, () => this.builder.build('csm', s.cadence, date, email));
+        // Team leads get the same report for their whole team, one row per CSM.
+        const leads = (await this.db.query<{ email: string; role: string }>(`SELECT email, role FROM app_user WHERE active AND role = 'cs_team_lead' ORDER BY email`)).rows;
+        for (const lead of leads) {
+          const team = (await this.org.csmsIn(await this.org.scopeFor(lead))).map((u) => u.email);
+          if (team.length === 0) continue;
+          await this.deliverEmail(s, date, lead.email, result, () => this.builder.build('csm', s.cadence, date, { emails: team, label: 'your team' }));
+        }
       } else {
         const report = await this.builder.build(s.audience, s.cadence, date);
         if (!report) {

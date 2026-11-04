@@ -3,12 +3,13 @@ import { z } from 'zod';
 import { Roles, type AuthUser, type Role } from '../auth/auth.js';
 import { APP_CONFIG, type AppConfig } from '../config/config.js';
 import { Database } from '../db/database.js';
+import { OrgService } from '../org/org.service.js';
 
 type Req = { user: AuthUser };
 
 export const ROLE_LIST = ['super_admin', 'cs_director', 'cs_team_lead', 'csm', 'implementation_manager', 'support_specialist', 'viewer'] as const;
 const InviteBody = z.object({ email: z.string().trim().email().max(200), role: z.enum(ROLE_LIST), name: z.string().trim().max(120).optional() });
-const UpdateBody = z.object({ role: z.enum(ROLE_LIST).optional(), active: z.boolean().optional(), name: z.string().trim().max(120).optional() }).refine((b) => Object.keys(b).length > 0, 'Nothing to change');
+const UpdateBody = z.object({ role: z.enum(ROLE_LIST).optional(), active: z.boolean().optional(), name: z.string().trim().max(120).optional(), managerEmail: z.string().trim().email().nullable().optional() }).refine((b) => Object.keys(b).length > 0, 'Nothing to change');
 
 /** Roles that count as administrators in the web app. */
 export const ADMIN_ROLES: Role[] = ['super_admin', 'cs_director'];
@@ -19,13 +20,14 @@ export class UsersController {
   constructor(
     @Inject(Database) private readonly db: Database,
     @Inject(APP_CONFIG) private readonly cfg: AppConfig,
+    @Inject(OrgService) private readonly org: OrgService,
   ) {}
 
   @Get()
   @Roles('cs_director')
   async list() {
     const { rows } = await this.db.query(
-      `SELECT email, role, active, display_name AS name, invited_by AS "invitedBy", created_at AS "createdAt", last_seen_at AS "lastSeenAt"
+      `SELECT email, role, active, display_name AS name, manager_email AS "managerEmail", invited_by AS "invitedBy", created_at AS "createdAt", last_seen_at AS "lastSeenAt"
          FROM app_user ORDER BY active DESC, role, email`,
     );
     return rows;
@@ -59,6 +61,7 @@ export class UsersController {
     const current = rows[0];
     if (!current) throw new NotFoundException('User not found');
     const { role, active, name } = parsed.data;
+    const managerEmail = parsed.data.managerEmail === undefined ? undefined : (parsed.data.managerEmail?.toLowerCase() ?? null);
     if (current.role === 'super_admin') this.checkMayAssign(req.user, 'super_admin');
     if (role) this.checkMayAssign(req.user, role);
     if (email === req.user.email && ((role && role !== current.role) || active === false)) throw new ForbiddenException('You cannot change your own role or deactivate yourself.');
@@ -68,11 +71,17 @@ export class UsersController {
       const n = (await this.db.query<{ n: number }>(`SELECT count(*)::int AS n FROM app_user WHERE role = 'super_admin' AND active`)).rows[0]!.n;
       if (n <= 1) throw new ConflictException('There must be at least one active super admin.');
     }
+    if (managerEmail) {
+      const m = (await this.db.query<{ role: Role }>('SELECT role FROM app_user WHERE email = $1 AND active', [managerEmail])).rows[0];
+      if (!m) throw new BadRequestException('The person they report to must be an active user');
+      if (!['super_admin', 'cs_director', 'cs_team_lead'].includes(m.role)) throw new BadRequestException('People can only report to a Team Lead, a CS Director or a super admin');
+      if (await this.org.wouldLoop(email, managerEmail)) throw new ConflictException('That would make a reporting loop');
+    }
     await this.db.query(
-      `UPDATE app_user SET role = $2, active = $3, display_name = COALESCE($4, display_name) WHERE email = $1`,
-      [email, nextRole, nextActive, name ?? null],
+      `UPDATE app_user SET role = $2, active = $3, display_name = COALESCE($4, display_name), manager_email = CASE WHEN $6::boolean THEN $5 ELSE manager_email END WHERE email = $1`,
+      [email, nextRole, nextActive, name ?? null, managerEmail ?? null, managerEmail !== undefined],
     );
-    await this.audit(req.user, active !== undefined && active !== current.active ? (active ? 'user.restore' : 'user.deactivate') : 'user.update', email, { role: nextRole, active: nextActive });
+    await this.audit(req.user, active !== undefined && active !== current.active ? (active ? 'user.restore' : 'user.deactivate') : 'user.update', email, { role: nextRole, active: nextActive, ...(managerEmail !== undefined ? { managerEmail } : {}) });
     return { email, role: nextRole, active: nextActive };
   }
 

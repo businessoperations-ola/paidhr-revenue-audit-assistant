@@ -95,7 +95,7 @@ describe('API with Google sign-in and roles', () => {
     const page = await http().get('/').expect(200);
     expect(page.headers['content-type']).toContain('text/html');
     expect(page.headers['content-security-policy']).toContain("frame-src https://accounts.google.com/gsi/");
-    expect(page.text).toContain('<title>PaidHR Audit Assistant</title>');
+    expect(page.text).toContain('<title>Oyela</title>');
     expect(page.text).toContain('data:image/png;base64,'); // logo is embedded
     expect(page.text).not.toMatch(/mailto:[a-z]/); // no help address baked in; it comes from HELP_EMAIL
     expect(page.text).toContain('"ENGAGEMENT_DROUGHT":"No contact within the limit"');
@@ -107,7 +107,7 @@ describe('API with Google sign-in and roles', () => {
   });
 
   it('tells the web app who is signed in', async () => {
-    await http().get('/me').set(as('director@example.com')).expect(200, { email: 'director@example.com', role: 'cs_director', isAdmin: true });
+    await http().get('/me').set(as('director@example.com')).expect(200, { email: 'director@example.com', role: 'cs_director', isAdmin: true, hasTeam: true, viewingAs: null, canViewAs: false, people: [] });
   });
 
   it('lets directors manage team leads, and logs it', async () => {
