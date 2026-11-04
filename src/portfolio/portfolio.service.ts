@@ -65,7 +65,7 @@ export interface CsmRow {
 }
 
 const SEV = ['urgent', 'high', 'medium', 'low'];
-const flagState = (f: StoredFlag) => (f.escalationLevel === 2 ? 'With directors' : f.escalationLevel === 1 ? 'With team lead' : f.acknowledgedAt ? 'Acknowledged' : f.notifiedAt ? 'Awaiting CSM' : 'Not sent yet');
+const flagState = (f: StoredFlag) => (f.escalationLevel === 2 ? 'With Head of CX' : f.escalationLevel === 1 ? 'With team lead' : f.acknowledgedAt ? 'Acknowledged' : f.notifiedAt ? 'Awaiting CSM' : 'Not sent yet');
 const maxDate = (xs: Array<IsoDate | null>): IsoDate | null => xs.reduce<IsoDate | null>((m, x) => (x && (!m || x > m) ? x : m), null);
 
 /** The CSM dashboard: every client in a person's scope with the numbers that matter. */

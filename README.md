@@ -1,6 +1,6 @@
-# Oyela
+# Rafiki
 
-*Oyela* is Yoruba for "bring forth" or "bring to light": it brings PaidHR's revenue, payroll and customer data to light for the CX team.
+*Rafiki* is Swahili for "friend": the CX team's friend in the data, bringing PaidHR's revenue, payroll and customer data together.
 
 Every morning at 04:00 WAT this service snapshots HubSpot and the Control Panel, checks billing and payroll, and alerts the right CSM in Google Chat, Gmail and HubSpot before the CX team starts work.
 
@@ -17,7 +17,7 @@ Phases 1 and 2 cover the billing audits, late-payroll alerts, engagement checks 
 | US-17 | Empty mandatory HubSpot fields, listed per company | `MISSING_FIELDS` | low |
 | US-24 | Payroll not run within the grace buffer (default 2 business days) after its expected date | `LATE_PAYROLL` | urgent |
 | US-13 / 14 | No call, meeting or email logged within the limit for the customer's health status (At Risk 7 days, Neutral 14, Healthy 30) | `ENGAGEMENT_DROUGHT` | high / medium / low |
-| US-16 | Urgent and high alerts not acknowledged within 3 business days go to the CSM's team lead, then 2 business days later to every CS Director | escalation | – |
+| US-16 | Urgent and high alerts not acknowledged within 3 business days go to the CSM's team lead, then 2 business days later to every Head of CX | escalation | – |
 
 ## How it works
 
@@ -28,7 +28,7 @@ Container Apps Job (04:00 WAT)
        2. audit     run every rule on today's snapshot → audit_flag (one open flag per problem)
        3. dispatch  new flags → Google Chat, Gmail, HubSpot tasks (recorded in `alert`)
 Container Apps Job (08:00 WAT, Mon–Fri)
-  └─ node dist/cli.js escalate   unacknowledged urgent/high alerts → team lead → CS Directors
+  └─ node dist/cli.js escalate   unacknowledged urgent/high alerts → team lead → Heads of CX
 API (Container App, Google sign-in)
   └─ admin web app at /, plus flags, acknowledgements, reports, rules, team leads, manual job runs
 ```
@@ -38,16 +38,16 @@ API (Container App, Google sign-in)
 - **Alerts are sent once.** Urgent flags go out on their own. Everything else is grouped into one chat message and one email per CSM per run. Failed sends are retried by the hourly `dispatch` job, up to 3 attempts per channel.
 - **Acknowledge links are signed.** The link in Chat or email opens a confirmation page. Only pressing the button records the acknowledgement, because email security scanners open links automatically.
 - **Safety stops.** The audit refuses to run without today's snapshot, and refuses an empty HubSpot pull. An outage therefore can't raise false late-payroll alerts or close every open flag.
-- **Escalation counts working days.** The clock starts when the CSM was first alerted. Acknowledging stops it, except for engagement droughts: those count as handled only when a call, meeting or email is logged in HubSpot, which also closes the flag. A CSM with no team lead on record escalates straight to the directors.
+- **Escalation counts working days.** The clock starts when the CSM was first alerted. Acknowledging stops it, except for engagement droughts: those count as handled only when a call, meeting or email is logged in HubSpot, which also closes the flag. A CSM with no team lead on record escalates straight to the Head of CX.
 - **Claude is optional.** With `AI_RATIONALE_ENABLED=true`, Claude Opus 5.5 (via Microsoft Foundry) adds a short "why" and "next step" to billing and payroll alerts. A failure never blocks an alert.
 - **Phase 3: numbers for leadership.** ARR bridge (new, expansion, contraction, churn), renewals, module adoption, contractor seats, health mix, ticket volume and each CSM's ARR against their 1 January baseline. All computed in code from daily snapshots. Contracts that expire after the last snapshot and have not renewed are left out of the renewal rate rather than counted as lost. Reports (Leadership, CSM, Implementation, Support) are scheduled in the app under Reports and sent by the `reports` job at 08:00 Lagos time.
 - **Phase 4: Claude CX tools (off by default).** With `AI_FEATURES_ENABLED=true`: onboarding playbooks on stalled accounts, ticket themes with draft macros and KB outlines, QBR drafts, and tone scoring that feeds a support early warning. Ticket text is redacted before storage and before it reaches Claude, and every answer is checked in code (real ticket ids only, size limits). Without it, the expansion radar, the 90-day scorecard and the reopened-ticket warning still work.
-- **Admin broadcasts.** Super admins and CS Directors can write to CSMs, the CX team and (super admins only) clients, now or on a schedule. Safe by default: `BROADCASTS_LIVE=false` is a dry run, the send must confirm the previewed count, there is a recipient cap, text is a safe subset (no HTML), clients get email only, and each client email is logged as a HubSpot note.
-- **One sign-in, role-based views.** Everyone signs in the same way (Google Workspace). Their role decides what they see: a Workspace area for everyone, plus an Administration area for super admins and CS Directors (rules, team leads, reconciliation, broadcasts, users).
-- **Organogram.** Each person can report to a Team Lead, CS Director or super admin (Users screen; CSM to team lead links on the Team leads screen count too). Everyone sees their own work and everyone under them: alerts, the dashboard, expansion radar and reports. Directors, viewers and super admins see everyone. Team leads are emailed a team report with a row per CSM.
+- **Admin broadcasts.** Super admins and Heads of CX can write to CSMs, the CX team and (super admins only) clients, now or on a schedule. Safe by default: `BROADCASTS_LIVE=false` is a dry run, the send must confirm the previewed count, there is a recipient cap, text is a safe subset (no HTML), clients get email only, and each client email is logged as a HubSpot note.
+- **One sign-in, role-based views.** Everyone signs in the same way (Google Workspace). Their role decides what they see: a Workspace area for everyone, plus an Administration area for super admins and Heads of CX (rules, team leads, reconciliation, broadcasts, users).
+- **Organogram.** Each person can report to a Team Lead, Head of CX or super admin (Users screen; CSM to team lead links on the Team leads screen count too). Everyone sees their own work and everyone under them: alerts, the dashboard, expansion radar and reports. The Head of CX, viewers and super admins see everyone. Team leads are emailed a team report with a row per CSM.
 - **CSM dashboard.** Every client in your scope with ARR, health, renewal countdown, seats in use against paid, last contact, payroll status, open alerts and tickets, with a detail panel per client (usage trend, adoption, alerts, tickets, expansion revenue, QBR draft).
 - **Product adoption.** For each client in a CSM's scope: when the primary and secondary admins last logged in and what they did; employee activity (sign-ins, leave, loan and profile-update requests, plus other modules) against the month before; every support ticket with its status, who raised it and SLA state (first reply and resolution, counted in elapsed hours); and modules bought against in use against possible upsell, with the reason for each idea. Idle modules are shown as a churn risk, and upsell is held back while a client has urgent or high alerts. Tickets past their SLA raise a "Support tickets past their SLA" alert to the CSM. Needs four optional Control Panel views (see `docs/control-panel-views.sql`); without them the rest of the screen still works.
-- **View as.** A super admin can switch to see Oyela as any user (director, team lead, CSM and so on). It is read-only and each switch is logged.
+- **View as.** A super admin can switch to see Rafiki as any user (director, team lead, CSM and so on). It is read-only and each switch is logged.
 This is a portal for PaidHR's own CX team, not a multi-tenant product.
 
 ## Run it locally
@@ -78,7 +78,7 @@ TEST_DATABASE_URL=postgresql://…/audit_test TEST_CP_DATABASE_URL=postgresql://
 | `node dist/cli.js migrate` | Apply database migrations (also runs automatically on start). |
 | `node dist/cli.js daily [--date YYYY-MM-DD]` | Ingest, audit, then dispatch. This is the scheduled job. |
 | `node dist/cli.js ingest\|audit\|dispatch [--date …]` | Run one step on its own. |
-| `node dist/cli.js escalate [--date …]` | Send unacknowledged alerts to team leads and directors (the 08:00 WAT job). |
+| `node dist/cli.js escalate [--date …]` | Send unacknowledged alerts to team leads and the Head of CX (the 08:00 WAT job). |
 | `node dist/cli.js grant <email> <role>` | Give a Google Workspace user access to the API and web app. |
 | `node dist/cli.js team <csm-email> <lead-email>` | Set a CSM's team lead (also editable in the web app). |
 
@@ -156,7 +156,7 @@ The Control Panel team installs `docs/control-panel-views.sql` on the read repli
 - [ ] Every active customer has a Control Panel ID in HubSpot. The first `UNLINKED_*` report shows which ones are missing.
 - [ ] Control Panel view installed and checked against 5 known accounts.
 - [ ] One week in shadow mode (`alertsLive=false`). Review the flags with CX Ops, then tune the rules.
-- [ ] Grant every CS Director the `cs_director` role, and set each CSM's team lead (web app → Team leads).
+- [ ] Grant every Head of CX the `cs_director` role, and set each CSM's team lead (web app → Team leads).
 - [ ] Check HubSpot health statuses are exactly `At Risk`, `Neutral` or `Healthy` (other values use the default limit).
 - [ ] Turn on alerts per channel (`alertsLive=true`). Optionally turn on `aiRationaleEnabled`.
 

@@ -74,7 +74,7 @@ export class UsersController {
     if (managerEmail) {
       const m = (await this.db.query<{ role: Role }>('SELECT role FROM app_user WHERE email = $1 AND active', [managerEmail])).rows[0];
       if (!m) throw new BadRequestException('The person they report to must be an active user');
-      if (!['super_admin', 'cs_director', 'cs_team_lead'].includes(m.role)) throw new BadRequestException('People can only report to a Team Lead, a CS Director or a super admin');
+      if (!['super_admin', 'cs_director', 'cs_team_lead'].includes(m.role)) throw new BadRequestException('People can only report to a Team Lead, a Head of CX or a super admin');
       if (await this.org.wouldLoop(email, managerEmail)) throw new ConflictException('That would make a reporting loop');
     }
     await this.db.query(

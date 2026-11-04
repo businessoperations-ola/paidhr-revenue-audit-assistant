@@ -68,8 +68,8 @@ describe('escalation against Postgres', () => {
       ['director2@example.com', 'director@example.com'],
     ]);
     expect(toDirectors.map((e) => e.subject).sort()).toEqual([
-      'Director escalation: 2 alerts for ngozi.okafor@example.com (no team lead on record)',
-      'Director escalation: 2 alerts on accounts with no CSM',
+      'Head of CX escalation: 2 alerts for ngozi.okafor@example.com (no team lead on record)',
+      'Head of CX escalation: 2 alerts on accounts with no CSM',
     ]);
     const noLead = toDirectors.find((e) => e.subject.includes('no team lead'))!;
     expect(noLead.text).toContain('has no team lead on record, so they come straight to you');
@@ -98,7 +98,7 @@ describe('escalation against Postgres', () => {
     expect(((await jobs.run('escalate', '2026-11-09')) as any).escalate.toDirectors).toBe(0); // Mon: 1 day
     const tuesday = (await jobs.run('escalate', '2026-11-10')) as any; // Tue: 2 days
     expect(tuesday.escalate).toMatchObject({ toLeads: 0, toDirectors: 2 });
-    expect(outbox.emails[0]!.subject).toBe('Director escalation: 2 alerts for tunde.bello@example.com still unhandled after team lead');
+    expect(outbox.emails[0]!.subject).toBe('Head of CX escalation: 2 alerts for tunde.bello@example.com still unhandled after team lead');
     expect(outbox.emails[0]!.text).toContain('were escalated to their team lead and are still unhandled');
   });
 

@@ -38,7 +38,7 @@ INSERT INTO rules_config (key, value, description) VALUES
   ('escalation_business_days', '3',
    'US-16: business days an alert can stay unacknowledged before it goes to the CSM''s team lead'),
   ('director_escalation_business_days', '2',
-   'US-16: further business days before an unacknowledged alert goes to the CS Directors'),
+   'US-16: further business days before an unacknowledged alert goes to the Heads of CX'),
   ('escalate_severities', '["urgent", "high"]',
    'US-16: alert levels that escalate. Medium and low flags stay with the CSM');
 `;

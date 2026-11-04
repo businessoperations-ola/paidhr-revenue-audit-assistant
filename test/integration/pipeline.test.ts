@@ -78,7 +78,7 @@ describe('phase-1 daily pipeline against Postgres', () => {
     expect(fallback[0]!.text).toContain('Enugu Steel');
     // The email only promises escalation because these flags really do escalate (phase 1 fix).
     expect(ngozi.find((e) => e.subject.startsWith('URGENT'))!.text).toContain('Monthly payroll expected 2026-10-28');
-    expect(ngozi.find((e) => e.subject.startsWith('URGENT'))!.text).toContain('within 3 business days, they go to your team lead, or to the CS Directors if you have none on record');
+    expect(ngozi.find((e) => e.subject.startsWith('URGENT'))!.text).toContain('within 3 business days, they go to your team lead, or to the Heads of CX if you have none on record');
     // Acknowledge links are signed and point at the API.
     expect(ngozi[0]!.text).toMatch(/https:\/\/audit\.example\.com\/ack\/\d+\?sig=[\w-]{32}/);
 

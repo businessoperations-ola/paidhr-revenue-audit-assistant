@@ -15,7 +15,7 @@ const HEALTH_RANK: Record<string, number> = { 'At Risk': 0, Neutral: 1, Healthy:
 const SEV_RANK: Record<string, number> = { urgent: 0, high: 1, medium: 2, low: 3 };
 
 function flagState(f: StoredFlag): string {
-  if (f.escalationLevel === 2) return 'With directors';
+  if (f.escalationLevel === 2) return 'With Head of CX';
   if (f.escalationLevel === 1) return 'With team lead';
   if (f.acknowledgedAt) return 'Acknowledged';
   return f.notifiedAt ? 'Awaiting CSM' : 'Not sent yet';
