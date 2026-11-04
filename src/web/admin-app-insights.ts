@@ -6,17 +6,69 @@
 export const INSIGHTS_HTML = /* html */ `
   <section id="view-adoption" hidden>
     <div class="bar" style="margin-bottom:12px">
-      <h2 style="margin-right:auto">Product adoption</h2>
+      <h2 style="margin-right:auto">Adoption rate</h2>
       <label class="small" id="ad-who-wrap">Show <select id="ad-who"></select></label>
       <input id="ad-search" type="search" placeholder="Search clients" aria-label="Search clients">
     </div>
     <p class="muted small" id="ad-asof"></p>
-    <h3 style="margin:12px 0 4px;font-size:16px">Modules: most purchased, in use, and open for upsell</h3>
-    <p class="muted small" id="ad-mod-note"></p>
-    <div class="card table-wrap"><table style="min-width:900px"><thead><tr><th>Module</th><th>Bought by</th><th>In use</th><th>Bought but not used</th><th>Possible upsell</th></tr></thead><tbody id="ad-matrix"></tbody></table></div>
+    <div class="grid2" id="ad-kpis" style="margin:12px 0"></div>
+    <h3 style="margin:20px 0 4px;font-size:16px">Modules bought against modules in use</h3>
+    <p class="muted small">For each module: how many clients bought it, and how many of those actually use it.</p>
+    <div class="card detail" id="ad-chart"></div>
     <h3 style="margin:24px 0 8px;font-size:16px">Clients</h3>
-    <div class="card table-wrap"><table style="min-width:1000px"><thead><tr><th>Client</th><th>Primary admin</th><th>Secondary admin</th><th>Employees active</th><th>Activity, 30 days</th><th>Support SLA</th><th>Modules in use</th><th>Upsell ready</th></tr></thead><tbody id="ad-clients"></tbody></table></div>
+    <div class="card table-wrap"><table style="min-width:1000px"><thead><tr><th>Client</th><th>Adoption rate</th><th>Churn risk</th><th>Partial churn</th><th>Experience</th><th>Best upsell</th><th>Primary admin</th></tr></thead><tbody id="ad-clients"></tbody></table></div>
     <div class="card detail" id="ad-detail" hidden style="margin-top:16px"></div>
+  </section>
+
+  <section id="view-churn" hidden>
+    <div class="bar" style="margin-bottom:12px"><h2 style="margin-right:auto">Churn risk</h2><label class="small" id="ch-who-wrap">Show <select id="ch-who"></select></label></div>
+    <p class="muted small">Adoption, admin activity, experience and the commercial picture rolled into one score. Partial churn is the module a client may drop at renewal even if they stay.</p>
+    <div class="grid2" id="ch-kpis" style="margin:12px 0"></div>
+    <div class="card table-wrap"><table style="min-width:900px"><thead><tr><th>Client</th><th>Churn risk</th><th>Why</th><th>Modules they may drop</th><th>ARR and renewal</th><th>What to do</th></tr></thead><tbody id="ch-rows"></tbody></table></div>
+    <div class="card detail" id="ch-detail" hidden style="margin-top:16px"></div>
+  </section>
+
+  <section id="view-upsell" hidden>
+    <div class="bar" style="margin-bottom:12px">
+      <h2 style="margin-right:auto">Upsell opportunities</h2>
+      <label class="small" id="up-who-wrap">Show <select id="up-who"></select></label>
+      <label class="small">Module <select id="up-module"><option value="">All modules</option></select></label>
+      <label class="small">Fit <select id="up-band"><option value="">Hot, warm and cool</option><option value="hot">Hot only</option><option value="warm">Warm and hot</option></select></label>
+      <label class="small"><input type="checkbox" id="up-ready"> Ready only</label>
+    </div>
+    <p class="muted small">Scored from what they have bought and use, how their experience has been, the time of year, new launches and their growth plans. Open a client to see every point.</p>
+    <div id="up-launches" style="margin:8px 0"></div>
+    <div class="grid2" id="up-kpis" style="margin:12px 0"></div>
+    <div class="card table-wrap"><table style="min-width:1000px"><thead><tr><th>Client</th><th>Module</th><th>Fit</th><th>Why now</th><th>When to ask</th><th>Status</th></tr></thead><tbody id="up-rows"></tbody></table></div>
+    <details class="card detail" style="margin-top:16px" id="up-how"><summary><strong>How it is scored</strong></summary><div id="up-how-body" style="display:grid;gap:8px;margin-top:10px"></div></details>
+    <div class="card detail" id="up-detail" hidden style="margin-top:16px"></div>
+  </section>
+
+  <section id="view-signals" hidden>
+    <h2>Growth signals</h2>
+    <p class="muted small">Record what you know about a client's plans: a fund raise, an expansion, a hiring push. Each one lifts the upsell score of the modules it points to, for six months.</p>
+    <form class="card detail" id="sg-form" style="margin:12px 0">
+      <div class="bar">
+        <select id="sg-client" aria-label="Client" required></select>
+        <select id="sg-kind" aria-label="Kind"><option value="FUNDRAISE">Fund raise</option><option value="EXPANSION">Expansion plans</option><option value="HIRING_PLAN">Hiring plans</option><option value="OTHER">Other growth news</option></select>
+        <label class="small">Happened <input type="date" id="sg-date" required></label>
+      </div>
+      <input id="sg-detail" placeholder="What happened, e.g. Closed a Series A of $5m" required maxlength="300" aria-label="Detail">
+      <div class="bar"><button class="btn primary" type="submit">Add signal</button></div>
+    </form>
+    <div class="card table-wrap"><table style="min-width:760px"><thead><tr><th>Client</th><th>Signal</th><th>When</th><th>Added by</th><th></th></tr></thead><tbody id="sg-rows"></tbody></table></div>
+  </section>
+
+  <section id="view-catalog" hidden>
+    <h2>Modules and seasons</h2>
+    <p class="muted small">The modules that can be sold, when each launched, and the times of year each is most likely to be bought. These drive the upsell scores.</p>
+    <div class="notice" id="ct-note" hidden></div>
+    <h3 style="margin:16px 0 8px;font-size:16px">Modules</h3>
+    <div class="card table-wrap"><table style="min-width:820px"><thead><tr><th>Module</th><th>Launched on</th><th>Launch note</th><th>On sale</th><th></th></tr></thead><tbody id="ct-modules"></tbody></table></div>
+    <form class="bar card" id="ct-add" style="padding:12px;margin:12px 0"><input id="ct-key" placeholder="KEY, e.g. BENEFITS" required maxlength="30" aria-label="Key"><input id="ct-label" placeholder="Name, e.g. Benefits administration" required maxlength="60" aria-label="Name"><button class="btn primary" type="submit">Add module</button></form>
+    <h3 style="margin:20px 0 8px;font-size:16px">Buying seasons</h3>
+    <p class="muted small">A season adds its points while it is open, and half in the weeks before it opens. A season can run over the year end, for example December to February.</p>
+    <div id="ct-seasons" style="display:grid;gap:12px"></div>
   </section>
 
   <section id="view-dashboard" hidden>
@@ -119,7 +171,7 @@ export const INSIGHTS_HTML = /* html */ `
 `;
 
 export const INSIGHTS_JS = String.raw`
-const ALL_VIEWS = ['dashboard', 'adoption', 'alerts', 'rules', 'teams', 'recon', 'reports', 'cx', 'support', 'broadcasts', 'users'];
+const ALL_VIEWS = ['dashboard', 'adoption', 'churn', 'upsell', 'signals', 'catalog', 'alerts', 'rules', 'teams', 'recon', 'reports', 'cx', 'support', 'broadcasts', 'users'];
 const AUDIENCE_LABELS = { executive: 'Leadership', csm: 'CSM portfolio', implementation: 'Implementation', support: 'Support' };
 const ROLE_AUDIENCES = { csm: ['csm'], implementation_manager: ['implementation'], support_specialist: ['support'] };
 const money = (kobo) => '₦' + (Number(BigInt(kobo) / 100n)).toLocaleString('en-NG');
@@ -466,7 +518,6 @@ async function openClient(id) {
 }
 
 /* ---------- Adoption ---------- */
-const adState = { data: null };
 const ADMIN_CHIP = { active: ['ok', 'active'], quiet: ['medium', 'quiet'], dormant: ['high', 'dormant'], never: ['low', 'never logged in'] };
 function loginCell(last, days, status) {
   const [cls, label] = ADMIN_CHIP[status];
@@ -476,45 +527,183 @@ const SLA_CHIP = { met: ['ok', 'met'], ok: ['low', 'on track'], at_risk: ['mediu
 const slaChip = (c, closed) => { const [cls, label] = SLA_CHIP[c.state]; return el('span', {}, el('span', { class: 'chip ' + cls }, label), el('div', { class: 'small muted' }, (Math.round(c.elapsedHours * 10) / 10) + 'h of ' + c.targetHours + 'h')); };
 const chg = (n) => n == null ? '' : (n > 0 ? '+' : '') + n + '%';
 const bar = (pct, color) => el('div', { style: 'height:6px;background:var(--blue-faint);border-radius:3px;width:120px;margin-top:4px' }, el('div', { style: 'height:6px;border-radius:3px;width:' + Math.min(pct || 0, 100) + '%;background:' + color }));
+
+/* shared by the four adoption pages */
+const adState = { data: null, csm: '', catalog: null };
+const BAND_CHIP = { strong: ['ok', 'strong'], partial: ['medium', 'partial'], weak: ['urgent', 'weak'] };
+const RISK_CHIP = { high: ['urgent', 'high'], medium: ['medium', 'medium'], low: ['ok', 'low'], none: ['ok', 'none'] };
+const FIT_CHIP = { hot: ['ok', 'hot'], warm: ['medium', 'warm'], cool: ['low', 'cool'] };
+const pts = (n) => (n > 0 ? '+' : n < 0 ? '−' : '') + Math.abs(n);
+const kpi = (label, value, note, cls) => el('div', { class: 'card stat' }, el('b', { style: cls ? 'color:var(--' + cls + ')' : '' }, value), el('span', {}, label), note ? el('span', { class: 'small muted' }, note) : null);
+function whoSelect(id) {
+  const sel = $(id); const d = adState.data;
+  sel.replaceChildren(el('option', { value: '' }, d.people.length > 1 && state.me.role !== 'csm' ? 'Everyone' : 'All my clients'), ...d.people.map((p) => el('option', { value: p.email, selected: p.email === adState.csm }, p.name || p.email)));
+  sel.value = adState.csm;
+  $(id + '-wrap').hidden = d.people.length <= 1;
+  if (!sel.dataset.wired) { sel.dataset.wired = '1'; sel.addEventListener('change', () => { adState.csm = sel.value; show(state.view); }); }
+}
+async function adFetch() {
+  adState.data = await api('/adoption' + (adState.csm ? '?csm=' + encodeURIComponent(adState.csm) : ''));
+  return adState.data;
+}
+const riskChip = (level) => { const [c, l] = RISK_CHIP[level]; return el('span', { class: 'chip ' + c }, l); };
+const scoreBar = (score, color) => el('div', { style: 'display:flex;align-items:center;gap:8px' }, el('b', { style: 'min-width:28px' }, String(score)), el('div', { style: 'height:6px;background:var(--blue-faint);border-radius:3px;width:90px' }, el('div', { style: 'height:6px;border-radius:3px;width:' + Math.min(score, 100) + '%;background:' + color })));
+const adoptionBar = (a) => a.ratePct == null ? el('span', { class: 'muted small' }, 'No module data') : el('div', {}, el('span', {}, a.inUse + ' of ' + a.purchased + ' in use'), el('span', { class: 'small muted' }, ' (' + a.ratePct + '%)'), bar(a.ratePct, a.ratePct >= 80 ? 'var(--ok)' : a.ratePct >= 50 ? 'var(--medium)' : 'var(--urgent)'));
+const experienceCell = (e) => el('div', { class: 'small' }, e.nps != null ? el('div', {}, 'NPS ' + e.nps + (e.npsBand ? ' (' + e.npsBand + ')' : '')) : el('div', { class: 'muted' }, 'No NPS'), e.csatPct != null ? el('div', {}, 'CSAT ' + e.csatPct + '%') : el('div', { class: 'muted' }, 'No CSAT'), el('div', { class: 'muted' }, e.openTickets + ' open, ' + e.closedTickets90 + ' closed (90d)'));
+const upsellCell = (c) => { const t = c.topOpportunities[0]; if (!t) return el('span', { class: 'muted small' }, c.modules.known ? 'Nothing to offer' : 'No module data'); const [cls, l] = FIT_CHIP[t.band]; return el('div', {}, el('b', {}, t.label), el('div', {}, el('span', { class: 'chip ' + cls }, l + ' ' + t.score), t.held ? el('span', { class: 'chip high', style: 'margin-left:4px' }, 'hold') : null)); };
+
+/* ---------- 1. Adoption rate ---------- */
 async function loadAdoption() {
-  const who = $('ad-who');
-  if (!who.dataset.wired) { who.dataset.wired = '1'; who.addEventListener('change', () => loadAdoption().catch((e) => notice(e.message, true))); $('ad-search').addEventListener('input', drawAdClients); }
-  const keep = who.value;
-  const d = await api('/adoption' + (keep ? '?csm=' + encodeURIComponent(keep) : ''));
-  adState.data = d; $('ad-detail').hidden = true;
-  $('ad-who-wrap').hidden = d.people.length <= 1;
-  who.replaceChildren(el('option', { value: '' }, d.people.length > 1 && state.me.role !== 'csm' ? 'Everyone' : 'All my clients'), ...d.people.map((p) => el('option', { value: p.email, selected: p.email === keep }, (p.name || p.email))));
-  who.value = keep;
-  $('ad-asof').textContent = 'Data as of ' + fmtDate(d.asOf) + '. Employee activity covers the last 30 days against the 30 before.';
-  $('ad-mod-note').textContent = d.modulesKnown ? 'Upsell means the client has not bought it, has no urgent or high alerts, and either already uses a related module or most customers have it.' : 'Modules bought are not available yet: the Control Panel view v_client_modules is not connected.';
-  $('ad-matrix').replaceChildren(...(d.matrix.some((m) => m.purchased > 0 || m.upsellClients.length) ? d.matrix.map((m) => el('tr', { style: 'cursor:default' },
-    el('td', {}, el('strong', {}, m.label)),
-    el('td', {}, el('div', {}, m.purchased + (m.purchased === 1 ? ' client' : ' clients') + ' (' + m.purchasedPct + '%)'), bar(m.purchasedPct, 'var(--blue)')),
-    el('td', {}, m.inUsePct == null ? el('span', { class: 'muted small' }, '–') : el('div', {}, m.inUse + ' of ' + m.purchased + ' (' + m.inUsePct + '%)', bar(m.inUsePct, m.inUsePct < 60 ? 'var(--high)' : 'var(--ok)'))),
-    el('td', {}, m.unusedClients.length ? m.unusedClients.map((n) => el('span', { class: 'chip high', style: 'margin:0 4px 4px 0' }, n)) : el('span', { class: 'muted small' }, 'None')),
-    el('td', {}, m.upsellClients.length ? m.upsellClients.map((x) => el('button', { class: 'chip low', style: 'margin:0 4px 4px 0;border:0;cursor:pointer', onclick: () => openAdoption(x.hubspotId) }, x.name)) : el('span', { class: 'muted small' }, 'None right now')))) : [el('tr', {}, el('td', { colspan: '5', class: 'muted' }, 'No module data yet.'))]));
+  const d = await adFetch(); whoSelect('ad-who');
+  if (!$('ad-search').dataset.wired) { $('ad-search').dataset.wired = '1'; $('ad-search').addEventListener('input', drawAdClients); }
+  $('ad-detail').hidden = true;
+  const p = d.portfolio;
+  $('ad-asof').textContent = 'Data as of ' + fmtDate(d.asOf) + '. A module counts as in use when it was used in the last 30 days.' + (d.modulesKnown ? '' : ' Modules bought are not available yet: the Control Panel view v_client_modules is not connected.');
+  $('ad-kpis').replaceChildren(
+    kpi('Portfolio adoption rate', p.adoptionRatePct == null ? '–' : p.adoptionRatePct + '%', p.modulesInUse + ' of ' + p.modulesBought + ' modules bought are in use' + (p.adoptionRateArrWeightedPct != null ? ' (' + p.adoptionRateArrWeightedPct + '% weighted by ARR)' : ''), p.adoptionRatePct == null ? null : p.adoptionRatePct >= 80 ? 'ok' : p.adoptionRatePct >= 50 ? 'medium' : 'urgent'),
+    kpi('Clients by adoption', p.bands.strong + ' / ' + p.bands.partial + ' / ' + p.bands.weak, 'strong (80%+) / partial / weak (under 50%)' + (p.bands.unknown ? '. ' + p.bands.unknown + ' with no module data' : '')),
+    kpi('Churn risk', p.churn.high + ' high, ' + p.churn.medium + ' medium', money(p.churn.highArrKobo) + ' ARR at high risk', p.churn.high ? 'urgent' : null),
+    kpi('Partial churn', p.partialChurn.clients + (p.partialChurn.clients === 1 ? ' client' : ' clients'), p.partialChurn.modules + ' modules may be dropped at renewal'),
+    kpi('Upsell ready', String(p.upsell.hot + p.upsell.warm), p.upsell.hot + ' hot, ' + p.upsell.warm + ' warm' + (p.upsell.held ? '. ' + p.upsell.held + ' on hold' : ''), p.upsell.hot ? 'ok' : null));
+  const max = Math.max(1, ...d.matrix.map((m) => m.purchased));
+  $('ad-chart').replaceChildren(...(d.matrix.some((m) => m.purchased > 0) ? d.matrix.map((m) => el('div', { style: 'display:grid;grid-template-columns:170px 1fr 150px;gap:12px;align-items:center' },
+    el('strong', { class: 'small' }, m.label),
+    el('div', { style: 'display:grid;gap:3px' },
+      el('div', { style: 'display:flex;align-items:center;gap:6px', title: m.purchased + ' bought' }, el('div', { style: 'height:10px;border-radius:3px;background:var(--blue);width:' + Math.max(2, (m.purchased * 100) / max) + '%' }), el('span', { class: 'small muted', style: 'white-space:nowrap' }, m.purchased + ' bought')),
+      el('div', { style: 'display:flex;align-items:center;gap:6px', title: m.inUse + ' in use' }, el('div', { style: 'height:10px;border-radius:3px;background:' + (m.inUsePct != null && m.inUsePct < 60 ? 'var(--urgent)' : 'var(--ok)') + ';width:' + Math.max(m.inUse ? 2 : 0, (m.inUse * 100) / max) + '%' }), el('span', { class: 'small muted', style: 'white-space:nowrap' }, m.inUse + ' in use'))),
+    el('div', { class: 'small' }, m.inUsePct == null ? el('span', { class: 'muted' }, 'Not bought by anyone') : el('b', { style: 'color:var(--' + (m.inUsePct >= 80 ? 'ok' : m.inUsePct >= 60 ? 'medium' : 'urgent') + ')' }, m.inUsePct + '% in use'), m.unusedClients.length ? el('div', { class: 'muted' }, 'Idle at ' + m.unusedClients.join(', ')) : null))) : [el('p', { class: 'muted', style: 'margin:0' }, 'No module data yet.')]));
   drawAdClients();
 }
 function drawAdClients() {
   const d = adState.data; if (!d) return;
   const term = $('ad-search').value.trim().toLowerCase();
-  const list = d.clients.filter((c) => !term || c.name.toLowerCase().includes(term)).sort((a, b) => (b.slaBreaches - a.slaBreaches) || ((b.primaryDaysSinceLogin ?? 9999) - (a.primaryDaysSinceLogin ?? 9999)));
-  $('ad-clients').replaceChildren(...(list.length ? list.map((c) => el('tr', { onclick: () => openAdoption(c.hubspotId) },
+  const list = d.clients.filter((c) => !term || c.name.toLowerCase().includes(term)).sort((a, b) => (a.adoption.ratePct ?? 101) - (b.adoption.ratePct ?? 101) || b.churn.score - a.churn.score);
+  $('ad-clients').replaceChildren(...(list.length ? list.map((c) => el('tr', { onclick: () => openAdoption(c.hubspotId, 'ad-detail') },
     el('td', {}, el('strong', {}, c.name), d.clients.length > 1 && c.csmName ? el('div', { class: 'small muted' }, c.csmName) : null),
-    el('td', {}, loginCell(c.primaryLastLoginAt, c.primaryDaysSinceLogin, c.primaryStatus)),
-    el('td', {}, c.secondaryLastLoginAt || c.secondaryStatus !== 'never' ? loginCell(c.secondaryLastLoginAt, c.secondaryLastLoginAt ? Math.max(0, Math.round((Date.now() - Date.parse(c.secondaryLastLoginAt)) / 86400000)) : null, c.secondaryStatus) : el('span', { class: 'muted small' }, 'None on record')),
-    el('td', {}, c.dailyActiveEmployees == null ? el('span', { class: 'muted small' }, '–') : el('div', {}, c.dailyActiveEmployees + ' a day', el('span', { class: 'small muted' }, c.engagementPct != null ? ' (' + c.engagementPct + '% of seats)' : ''), c.engagementPct != null ? bar(c.engagementPct, c.engagementPct < 30 ? 'var(--high)' : 'var(--blue)') : null)),
-    el('td', {}, el('div', {}, c.activityLast30.toLocaleString('en-NG')), c.activityChangePct == null ? null : el('span', { class: 'small', style: 'font-weight:600;color:' + (c.activityChangePct < -20 ? 'var(--urgent)' : c.activityChangePct < 0 ? 'var(--high)' : 'var(--ok)') }, chg(c.activityChangePct))),
-    el('td', {}, c.openTickets === 0 ? el('span', { class: 'muted small' }, 'No open tickets') : el('div', {}, c.slaBreaches ? el('span', { class: 'chip urgent' }, c.slaBreaches + ' past SLA') : null, c.slaAtRisk ? el('span', { class: 'chip medium', style: 'margin-left:4px' }, c.slaAtRisk + ' at risk') : null, !c.slaBreaches && !c.slaAtRisk ? el('span', { class: 'chip ok' }, c.openTickets + ' on track') : null)),
-    el('td', {}, c.modules.known ? el('div', {}, c.modules.inUse + ' of ' + c.modules.purchased, c.modules.unused ? el('div', { class: 'small', style: 'color:var(--high)' }, c.modules.unused + ' unused') : null) : el('span', { class: 'muted small' }, '–')),
-    el('td', {}, c.upsellReady ? el('span', { class: 'chip ok' }, c.upsellReady + ' ideas') : el('span', { class: 'muted small' }, '–')))) : [el('tr', {}, el('td', { colspan: '8', class: 'muted' }, 'No clients match.'))]));
+    el('td', {}, adoptionBar(c.adoption), c.adoption.band ? el('span', { class: 'chip ' + BAND_CHIP[c.adoption.band][0] }, BAND_CHIP[c.adoption.band][1]) : null),
+    el('td', {}, scoreBar(c.churn.score, c.churn.level === 'high' ? 'var(--urgent)' : c.churn.level === 'medium' ? 'var(--medium)' : 'var(--ok)'), riskChip(c.churn.level)),
+    el('td', {}, c.partial.level === 'none' ? el('span', { class: 'muted small' }, 'None') : el('div', {}, riskChip(c.partial.level), el('div', { class: 'small muted' }, c.partial.modules.map((m) => m.label).join(', ')))),
+    el('td', {}, experienceCell(c.experience)),
+    el('td', {}, upsellCell(c)),
+    el('td', {}, loginCell(c.primaryLastLoginAt, c.primaryDaysSinceLogin, c.primaryStatus)))) : [el('tr', {}, el('td', { colspan: '7', class: 'muted' }, 'No clients match.'))]));
 }
-async function openAdoption(id) {
-  const box = $('ad-detail'); box.hidden = false; box.replaceChildren(el('p', { class: 'muted' }, 'Loading...')); box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+/* ---------- 2. Churn risk ---------- */
+function suggestAction(c) {
+  const out = [];
+  if (c.primaryStatus === 'dormant' || c.primaryStatus === 'never') out.push('Call the primary admin: they have gone quiet');
+  if (c.partial.modules.some((m) => m.reasons[0].startsWith('Bought but not used'))) out.push('Book a training session on ' + c.partial.modules.filter((m) => m.reasons[0].startsWith('Bought but not used')).map((m) => m.label).join(' and '));
+  if (c.slaBreaches > 0) out.push('Step in on ' + c.slaBreaches + ' support ' + (c.slaBreaches === 1 ? 'ticket' : 'tickets') + ' past SLA');
+  if (c.experience.npsBand === 'detractor') out.push('Hold a service recovery call');
+  if (c.daysToRenewal != null && c.daysToRenewal >= 0 && c.daysToRenewal <= 90) out.push('Plan the renewal: it is in ' + c.daysToRenewal + ' days');
+  return out.length ? out : ['Keep checking in'];
+}
+async function loadChurn() {
+  const d = await adFetch(); whoSelect('ch-who'); $('ch-detail').hidden = true;
+  const p = d.portfolio;
+  $('ch-kpis').replaceChildren(kpi('High churn risk', String(p.churn.high), money(p.churn.highArrKobo) + ' ARR', p.churn.high ? 'urgent' : null), kpi('Medium churn risk', String(p.churn.medium), money(p.churn.mediumArrKobo) + ' ARR', p.churn.medium ? 'medium' : null), kpi('Partial churn', String(p.partialChurn.clients), p.partialChurn.modules + ' modules may be dropped, on ' + money(p.partialChurn.arrKobo) + ' ARR'), kpi('Portfolio adoption rate', p.adoptionRatePct == null ? '–' : p.adoptionRatePct + '%', 'Low adoption is the biggest driver'));
+  const list = d.clients.filter((c) => c.churn.level !== 'low' || c.partial.level !== 'none').sort((a, b) => b.churn.score - a.churn.score || (b.partial.level === 'high') - (a.partial.level === 'high'));
+  $('ch-rows').replaceChildren(...(list.length ? list.map((c) => el('tr', { onclick: () => openAdoption(c.hubspotId, 'ch-detail') },
+    el('td', {}, el('strong', {}, c.name), d.clients.length > 1 && c.csmName ? el('div', { class: 'small muted' }, c.csmName) : null, el('div', { class: 'small muted' }, c.adoption.ratePct == null ? 'No module data' : 'Adoption ' + c.adoption.ratePct + '%')),
+    el('td', {}, scoreBar(c.churn.score, c.churn.level === 'high' ? 'var(--urgent)' : c.churn.level === 'medium' ? 'var(--medium)' : 'var(--ok)'), riskChip(c.churn.level)),
+    el('td', {}, el('ul', { class: 'small', style: 'margin:0;padding-left:16px' }, c.churn.reasons.slice(0, 4).map((r) => el('li', {}, r.text + ' (' + pts(r.points) + ')')))),
+    el('td', {}, c.partial.modules.length ? c.partial.modules.map((m) => el('div', { style: 'margin-bottom:4px' }, el('span', { class: 'chip ' + RISK_CHIP[m.risk][0] }, m.label), el('div', { class: 'small muted' }, m.reasons[0]))) : el('span', { class: 'muted small' }, 'None')),
+    el('td', {}, el('div', {}, c.arrKobo == null ? '–' : money(c.arrKobo)), c.daysToRenewal != null ? el('span', { class: 'chip ' + (c.daysToRenewal < 0 ? 'urgent' : c.daysToRenewal <= 90 ? 'high' : 'low') }, c.daysToRenewal < 0 ? 'ended' : 'renews in ' + c.daysToRenewal + 'd') : null),
+    el('td', {}, el('ul', { class: 'small', style: 'margin:0;padding-left:16px' }, suggestAction(c).map((a) => el('li', {}, a)))))) : [el('tr', {}, el('td', { colspan: '6', class: 'muted' }, 'No clients are at risk right now.'))]));
+}
+
+/* ---------- 3. Upsell opportunities ---------- */
+async function loadUpsell() {
+  const d = await adFetch(); whoSelect('up-who'); $('up-detail').hidden = true;
+  const cat = adState.catalog || (adState.catalog = await api('/adoption/catalog'));
+  if (!$('up-module').dataset.wired) {
+    $('up-module').dataset.wired = '1';
+    $('up-module').append(...cat.modules.filter((m) => m.active).map((m) => el('option', { value: m.key }, m.label)));
+    ['up-module', 'up-band', 'up-ready'].forEach((id) => $(id).addEventListener('change', drawUpsell));
+    $('up-how-body').replaceChildren(...[['Adoption', [cat.scoring.adoption]], ['Churn risk', cat.scoring.churn], ['Partial churn', cat.scoring.partialChurn], ['Upsell', cat.scoring.upsell]].map(([t, items]) => el('div', {}, el('strong', {}, t), el('ul', { class: 'small', style: 'margin:4px 0 0;padding-left:18px' }, items.map((i) => el('li', {}, i))))));
+  }
+  $('up-launches').replaceChildren(...(d.newLaunches.length ? [el('div', { class: 'notice' }, 'New launches: ' + d.newLaunches.map((m) => m.label + ' (' + fmtDate(m.launchedOn) + (m.note ? ', ' + m.note : '') + ')').join('; ') + '. Every client that has not bought them gets a boost.')] : []));
+  const o = d.opportunities.filter((x) => !x.held && x.band !== 'cool');
+  const value = (b) => o.filter((x) => x.band === b).length;
+  $('up-kpis').replaceChildren(kpi('Hot opportunities', String(value('hot')), 'Score 60 or more, account ready', value('hot') ? 'ok' : null), kpi('Warm opportunities', String(value('warm')), 'Score 40 to 59'), kpi('On hold', String(d.opportunities.filter((x) => x.held).length), 'Fix churn risk, alerts or service first'), kpi('Ideas in total', String(d.opportunities.length), 'Across ' + new Set(d.opportunities.map((x) => x.hubspotId)).size + ' clients'));
+  drawUpsell();
+}
+function drawUpsell() {
+  const d = adState.data; if (!d) return;
+  const mod = $('up-module').value, band = $('up-band').value, ready = $('up-ready').checked;
+  const list = d.opportunities.filter((o) => (!mod || o.module === mod) && (!band || (band === 'hot' ? o.band === 'hot' : o.band !== 'cool')) && (!ready || !o.held));
+  $('up-rows').replaceChildren(...(list.length ? list.slice(0, 200).map((o) => el('tr', { onclick: () => openAdoption(o.hubspotId, 'up-detail') },
+    el('td', {}, el('strong', {}, o.client), o.csmName && d.clients.length > 1 ? el('div', { class: 'small muted' }, o.csmName) : null, o.arrKobo != null ? el('div', { class: 'small muted' }, money(o.arrKobo) + ' ARR') : null),
+    el('td', {}, el('b', {}, o.label), o.isNewLaunch ? el('span', { class: 'chip ok', style: 'margin-left:6px' }, 'new') : null),
+    el('td', {}, scoreBar(o.score, o.band === 'hot' ? 'var(--ok)' : o.band === 'warm' ? 'var(--medium)' : 'var(--faint)'), el('span', { class: 'chip ' + FIT_CHIP[o.band][0] }, FIT_CHIP[o.band][1])),
+    el('td', {}, el('ul', { class: 'small', style: 'margin:0;padding-left:16px' }, o.reasons.slice(0, 4).map((r) => el('li', {}, r.text + ' (' + pts(r.points) + ')')))),
+    el('td', { class: 'small' }, o.when || '–'),
+    el('td', {}, o.held ? el('div', {}, el('span', { class: 'chip high' }, 'hold'), el('ul', { class: 'small muted', style: 'margin:4px 0 0;padding-left:16px' }, o.holds.map((h) => el('li', {}, h)))) : el('span', { class: 'chip ok' }, 'ready')))) : [el('tr', {}, el('td', { colspan: '6', class: 'muted' }, 'No opportunities match.'))]));
+}
+
+/* ---------- 4. Growth signals ---------- */
+const SIGNAL_KIND = { FUNDRAISE: 'Fund raise', EXPANSION: 'Expansion plans', HIRING_PLAN: 'Hiring plans', OTHER: 'Growth news' };
+async function loadSignals() {
+  const canAdd = ['csm', 'cs_team_lead', 'cs_director'].includes(state.me.role) || state.me.isAdmin;
+  $('sg-form').hidden = !canAdd;
+  const d = await api('/adoption/signals');
+  $('sg-client').replaceChildren(el('option', { value: '' }, 'Choose a client'), ...d.clients.map((c) => el('option', { value: c.hubspotId }, c.name)));
+  if (!$('sg-form').dataset.wired) {
+    $('sg-form').dataset.wired = '1'; $('sg-date').value = new Date().toISOString().slice(0, 10);
+    $('sg-form').addEventListener('submit', async (e) => { e.preventDefault(); try { await api('/adoption/signals', { method: 'POST', body: JSON.stringify({ hubspotId: $('sg-client').value, kind: $('sg-kind').value, detail: $('sg-detail').value, happenedOn: $('sg-date').value }) }); notice('Signal added. It now counts towards upsell scores.'); $('sg-detail').value = ''; loadSignals(); } catch (err) { if (err.message !== 'unauthorized') notice(err.message, true); } });
+  }
+  $('sg-rows').replaceChildren(...(d.signals.length ? d.signals.map((x) => el('tr', { style: 'cursor:default' }, el('td', {}, el('strong', {}, x.client)), el('td', {}, el('span', { class: 'chip low' }, SIGNAL_KIND[x.kind]), el('div', {}, x.detail)), el('td', { class: 'small' }, fmtDate(x.happenedOn) + ', counts until ' + fmtDate(x.validUntil)), el('td', { class: 'small muted' }, x.addedBy),
+    el('td', {}, canAdd ? el('button', { class: 'btn', onclick: async () => { try { await api('/adoption/signals/' + x.id, { method: 'DELETE' }); notice('Removed'); loadSignals(); } catch (err) { notice(err.message, true); } } }, 'Remove') : null))) : [el('tr', {}, el('td', { colspan: '5', class: 'muted' }, 'No growth signals recorded yet.'))]));
+}
+
+/* ---------- 5. Modules and seasons (Head of CX) ---------- */
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+async function loadCatalog() {
+  const cat = await api('/adoption/catalog'); adState.catalog = cat;
+  const canEdit = state.me.isAdmin;
+  $('ct-add').hidden = !canEdit;
+  $('ct-note').hidden = cat.windowsConfirmed || !canEdit; $('ct-note').textContent = 'The buying seasons below are starting points set by the build team. Review them and press Save on each module to confirm.';
+  if (!$('ct-add').dataset.wired) { $('ct-add').dataset.wired = '1'; $('ct-add').addEventListener('submit', async (e) => { e.preventDefault(); try { await api('/adoption/catalog/modules', { method: 'POST', body: JSON.stringify({ key: $('ct-key').value.trim().toUpperCase(), label: $('ct-label').value.trim() }) }); notice('Module added'); $('ct-add').reset(); loadCatalog(); } catch (err) { if (err.message !== 'unauthorized') notice(err.message, true); } }); }
+  $('ct-modules').replaceChildren(...cat.modules.map((m) => {
+    const date = el('input', { type: 'date', value: m.launchedOn || '', disabled: !canEdit, 'aria-label': 'Launched on, ' + m.label });
+    const note = el('input', { value: m.launchNote || '', placeholder: 'e.g. with 360 feedback', maxlength: '160', disabled: !canEdit, 'aria-label': 'Launch note, ' + m.label, style: 'width:100%' });
+    const on = el('input', { type: 'checkbox', checked: m.active, disabled: !canEdit, 'aria-label': 'On sale, ' + m.label });
+    return el('tr', { style: 'cursor:default' }, el('td', {}, el('strong', {}, m.label), el('div', { class: 'mono muted' }, m.key)), el('td', {}, date), el('td', {}, note), el('td', {}, on),
+      el('td', {}, canEdit ? el('button', { class: 'btn', onclick: async () => { try { await api('/adoption/catalog/modules/' + m.key, { method: 'PUT', body: JSON.stringify({ launchedOn: date.value || null, launchNote: note.value || null, active: on.checked }) }); notice('Saved'); } catch (err) { if (err.message !== 'unauthorized') notice(err.message, true); } } }, 'Save') : null));
+  }));
+  $('ct-seasons').replaceChildren(...cat.modules.map((m) => seasonCard(m, cat.windows.filter((w) => w.module === m.key), canEdit)));
+}
+function seasonCard(m, windows, canEdit) {
+  const rows = el('div', { style: 'display:grid;gap:6px' });
+  const addRow = (w) => {
+    const sm = el('select', { 'aria-label': 'From month' }, MONTHS.map((n, i) => el('option', { value: String(i + 1), selected: w.startMonth === i + 1 }, n)));
+    const em = el('select', { 'aria-label': 'To month' }, MONTHS.map((n, i) => el('option', { value: String(i + 1), selected: w.endMonth === i + 1 }, n)));
+    const boost = el('input', { type: 'number', min: '0', max: '30', value: String(w.boost), style: 'width:70px', 'aria-label': 'Points' });
+    const reason = el('input', { value: w.reason, maxlength: '120', style: 'flex:1;min-width:180px', 'aria-label': 'Why' });
+    const row = el('div', { class: 'bar', 'data-row': '1' }, sm, 'to', em, boost, 'points', reason, canEdit ? el('button', { class: 'btn', type: 'button', onclick: () => row.remove() }, 'Remove') : null);
+    row.read = () => ({ startMonth: Number(sm.value), endMonth: Number(em.value), boost: Number(boost.value), reason: reason.value.trim() });
+    [sm, em, boost, reason].forEach((x) => (x.disabled = !canEdit));
+    rows.append(row);
+  };
+  windows.forEach(addRow);
+  return el('div', { class: 'card detail' }, el('strong', {}, m.label), windows.length ? null : el('p', { class: 'muted small', style: 'margin:0' }, 'No buying seasons: this module is not seasonal.'), rows,
+    canEdit ? el('div', { class: 'bar' }, el('button', { class: 'btn', type: 'button', onclick: () => addRow({ startMonth: 1, endMonth: 1, boost: 10, reason: '' }) }, 'Add a season'),
+      el('button', { class: 'btn primary', type: 'button', onclick: async () => { try { await api('/adoption/catalog/seasonality/' + m.key, { method: 'PUT', body: JSON.stringify({ windows: [...rows.children].map((r) => r.read()) }) }); notice('Seasons saved for ' + m.label); loadCatalog(); } catch (err) { if (err.message !== 'unauthorized') notice(err.message, true); } } }, 'Save')) : null);
+}
+
+/* ---------- one client, everything (shared by the pages above) ---------- */
+async function openAdoption(id, boxId) {
+  const box = $(boxId || 'ad-detail'); box.hidden = false; box.replaceChildren(el('p', { class: 'muted' }, 'Loading...')); box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   try {
     const r = await api('/adoption/clients/' + encodeURIComponent(id));
     const sec = (title, ...kids) => el('div', { style: 'display:grid;gap:10px' }, el('h3', { style: 'margin:8px 0 0;font-size:17px' }, title), ...kids);
-    const tile = (label, value, note, cls) => el('div', { class: 'card stat' }, el('b', { style: cls ? 'color:var(--' + cls + ')' : '' }, value), el('span', {}, label), note ? el('span', { class: 'small muted' }, note) : null);
+    const tile = (label, value, note, cls) => kpi(label, value, note, cls);
+    const sm = r.summary;
+    const top = el('div', { class: 'grid2' },
+      tile('Adoption rate', sm.adoption.ratePct == null ? '–' : sm.adoption.ratePct + '%', sm.adoption.inUse + ' of ' + sm.adoption.purchased + ' modules bought are in use', sm.adoption.band ? BAND_CHIP[sm.adoption.band][0] === 'ok' ? 'ok' : BAND_CHIP[sm.adoption.band][0] : null),
+      tile('Churn risk', r.churn.level + ' (' + r.churn.score + ')', r.partialChurn.level === 'none' ? 'No module likely to be dropped' : r.partialChurn.modules.length + ' module(s) may be dropped', r.churn.level === 'high' ? 'urgent' : r.churn.level === 'medium' ? 'medium' : 'ok'),
+      tile('Experience', sm.experience.nps != null ? 'NPS ' + sm.experience.nps : 'No NPS', (sm.experience.csatPct != null ? 'CSAT ' + sm.experience.csatPct + '%. ' : 'No CSAT. ') + sm.experience.openTickets + ' open and ' + sm.experience.closedTickets90 + ' closed tickets (90 days)'),
+      tile('Best upsell', r.opportunities[0] ? r.opportunities[0].label : '–', r.opportunities[0] ? 'Fit ' + r.opportunities[0].score + ' (' + r.opportunities[0].band + ')' + (r.opportunities[0].holds.length ? ', on hold' : '') : 'Nothing to offer'));
     // 1. administrators
     const admins = r.admins.length ? el('div', { class: 'grid2' }, r.admins.map((a) => el('div', { class: 'card detail' },
       el('div', { class: 'bar' }, el('strong', {}, a.name || a.email), el('span', { class: 'chip low' }, a.level === 'PRIMARY' ? 'Primary admin' : 'Secondary admin'), el('span', { class: 'chip ' + ADMIN_CHIP[a.status][0] }, ADMIN_CHIP[a.status][1])),
@@ -523,12 +712,11 @@ async function openAdoption(id) {
       el('div', { class: 'small muted' }, 'What they did in the last 30 days'),
       a.recentActions.length ? el('ul', { style: 'margin:0;padding-left:18px' }, a.recentActions.map((x) => el('li', {}, fmtDate(x.at) + ': ' + x.action))) : el('p', { class: 'muted small', style: 'margin:0' }, 'Nothing recorded.')))) : el('p', { class: 'muted' }, 'No administrators on record (the Control Panel view v_client_admins has nothing for this client).');
     // 2. employees
-    const e = r.employees; const head = e.lines.filter((l) => ['SIGN_IN', 'LEAVE_REQUEST', 'LOAN_REQUEST', 'PROFILE_UPDATE'].includes(l.eventType));
-    const have = new Set(head.map((l) => l.eventType));
-    const tiles = ['SIGN_IN', 'LEAVE_REQUEST', 'LOAN_REQUEST', 'PROFILE_UPDATE'].map((t) => { const l = head.find((x) => x.eventType === t); return tile(({ SIGN_IN: 'Sign-ins', LEAVE_REQUEST: 'Leave requests', LOAN_REQUEST: 'Loan requests', PROFILE_UPDATE: 'Profile updates' })[t], l ? l.last30.toLocaleString('en-NG') : '0', l && l.changePct != null ? chg(l.changePct) + ' on the 30 days before' : (have.has(t) ? '' : 'No activity recorded')); });
+    const e = r.employees; const HEAD = ['SIGN_IN', 'LEAVE_REQUEST', 'LOAN_REQUEST', 'PROFILE_UPDATE'];
+    const tiles = HEAD.map((t) => { const l = e.lines.find((x) => x.eventType === t); return tile(({ SIGN_IN: 'Sign-ins', LEAVE_REQUEST: 'Leave requests', LOAN_REQUEST: 'Loan requests', PROFILE_UPDATE: 'Profile updates' })[t], l ? l.last30.toLocaleString('en-NG') : '0', l && l.changePct != null ? chg(l.changePct) + ' on the 30 days before' : (l ? '' : 'No activity recorded')); });
     const maxW = Math.max(1, ...e.weekly.map((w) => Object.values(w.counts).reduce((a, b) => a + b, 0)));
     const chart = e.weekly.length ? el('div', {}, el('div', { class: 'small muted' }, 'Employee activity per week (sign-ins, leave, loans and profile updates)'), el('div', { style: 'display:flex;gap:6px;align-items:flex-end;height:84px;margin-top:6px' }, e.weekly.map((w) => { const t = Object.values(w.counts).reduce((a, b) => a + b, 0); return el('div', { style: 'flex:1;display:grid;gap:2px;justify-items:center', title: fmtDate(w.from) + ' to ' + fmtDate(w.to) + ': ' + t }, el('div', { class: 'small muted' }, String(t)), el('div', { style: 'width:100%;border-radius:3px 3px 0 0;background:var(--blue);height:' + Math.max(2, Math.round((t * 56) / maxW)) + 'px' })); })), el('div', { style: 'display:flex;gap:6px' }, e.weekly.map((w) => el('div', { class: 'small muted', style: 'flex:1;text-align:center;font-size:11px' }, fmtDate(w.from))))) : null;
-    const others = e.lines.filter((l) => !['SIGN_IN', 'LEAVE_REQUEST', 'LOAN_REQUEST', 'PROFILE_UPDATE'].includes(l.eventType));
+    const others = e.lines.filter((l) => !HEAD.includes(l.eventType));
     // 3. support
     const sp = r.support; const ss = sp.summary;
     const support = [el('div', { class: 'grid2' }, tile('Open tickets', String(ss.open), ''), tile('Past SLA', String(ss.breached), 'Step in on these', ss.breached ? 'urgent' : null), tile('At risk of breaching', String(ss.atRisk), ''), tile('Average first reply', ss.avgFirstResponseHours == null ? '–' : ss.avgFirstResponseHours + 'h', ss.resolvedWithinSlaPct == null ? '' : ss.resolvedWithinSlaPct + '% of closed tickets resolved within target')),
@@ -540,15 +728,30 @@ async function openAdoption(id) {
     // 4. modules
     const inUse = r.modules.filter((m) => m.status === 'in_use'); const unused = r.modules.filter((m) => m.status === 'unused');
     const modules = el('div', { class: 'grid2' },
-      el('div', { class: 'card detail' }, el('strong', {}, 'In use (' + inUse.length + ')'), inUse.length ? el('ul', { style: 'margin:0;padding-left:18px' }, inUse.map((m) => el('li', {}, el('b', {}, m.label), el('span', { class: 'small muted' }, ' · ' + (m.events30 ? m.events30.toLocaleString('en-NG') + ' actions in 30 days' : 'active') + (m.lastActive ? ', last ' + fmtDate(m.lastActive) : '')))) ) : el('p', { class: 'muted small', style: 'margin:0' }, 'Nothing in use.')),
-      el('div', { class: 'card detail' }, el('strong', {}, 'Bought but not used (' + unused.length + ')'), unused.length ? el('ul', { style: 'margin:0;padding-left:18px' }, unused.map((m) => el('li', {}, el('b', {}, m.label), el('span', { class: 'small muted' }, m.lastActive ? ' · last used ' + fmtDate(m.lastActive) : ' · never used')))) : el('p', { class: 'muted small', style: 'margin:0' }, 'Everything bought is being used.'), unused.length ? el('p', { class: 'small', style: 'margin:0;color:var(--high)' }, 'Bought but idle is a churn risk. Book a training call.') : null),
-      el('div', { class: 'card detail', style: 'grid-column:1/-1' }, el('strong', {}, 'Possible upsell'), r.upsell.length ? el('div', { style: 'display:grid;gap:8px' }, r.upsell.filter((u) => u.reasons.length).slice(0, 5).map((u) => el('div', {}, el('b', {}, u.label), u.ready ? el('span', { class: 'chip ok', style: 'margin-left:6px' }, 'ready') : el('span', { class: 'chip high', style: 'margin-left:6px' }, 'hold: ' + u.holdReason), el('div', { class: 'small muted' }, u.reasons.join('. ') + '.')))) : el('p', { class: 'muted small', style: 'margin:0' }, r.modules.some((m) => m.status !== 'not_purchased') ? 'They already have every module.' : 'Modules bought are not available for this client.')));
+      el('div', { class: 'card detail' }, el('strong', {}, 'In use (' + inUse.length + ')'), inUse.length ? el('ul', { style: 'margin:0;padding-left:18px' }, inUse.map((m) => el('li', {}, el('b', {}, m.label), el('span', { class: 'small muted' }, ' · ' + (m.events30 ? m.events30.toLocaleString('en-NG') + ' actions in 30 days' : 'active') + (m.lastActive ? ', last ' + fmtDate(m.lastActive) : ''))))) : el('p', { class: 'muted small', style: 'margin:0' }, 'Nothing in use.')),
+      el('div', { class: 'card detail' }, el('strong', {}, 'Bought but not used (' + unused.length + ')'), unused.length ? el('ul', { style: 'margin:0;padding-left:18px' }, unused.map((m) => el('li', {}, el('b', {}, m.label), el('span', { class: 'small muted' }, m.lastActive ? ' · last used ' + fmtDate(m.lastActive) : ' · never used')))) : el('p', { class: 'muted small', style: 'margin:0' }, 'Everything bought is being used.')));
+    // 5. churn
+    const churn = el('div', { class: 'grid2' },
+      el('div', { class: 'card detail' }, el('div', { class: 'bar' }, el('strong', {}, 'Churn risk'), riskChip(r.churn.level), el('b', {}, String(r.churn.score) + ' of 100')), r.churn.reasons.length ? el('ul', { style: 'margin:0;padding-left:18px' }, r.churn.reasons.map((x) => el('li', {}, x.text + ' (' + pts(x.points) + ')'))) : el('p', { class: 'muted small', style: 'margin:0' }, 'Nothing is pointing to churn.')),
+      el('div', { class: 'card detail' }, el('div', { class: 'bar' }, el('strong', {}, 'Partial churn'), r.partialChurn.level === 'none' ? el('span', { class: 'chip ok' }, 'none') : riskChip(r.partialChurn.level)), r.partialChurn.modules.length ? r.partialChurn.modules.map((m) => el('div', {}, el('b', {}, m.label), el('ul', { class: 'small muted', style: 'margin:2px 0 6px;padding-left:18px' }, m.reasons.map((x) => el('li', {}, x.text + ' (' + pts(x.points) + ')'))))) : el('p', { class: 'muted small', style: 'margin:0' }, 'No module looks likely to be dropped.')));
+    // 6. upsell
+    const opps = r.opportunities.filter((o) => o.score >= 15).slice(0, 6);
+    const upsell = opps.length ? el('div', { style: 'display:grid;gap:10px' }, opps.map((o) => el('div', { class: 'card detail' },
+      el('div', { class: 'bar' }, el('strong', {}, o.label), o.isNewLaunch ? el('span', { class: 'chip ok' }, 'new') : null, el('span', { class: 'chip ' + FIT_CHIP[o.band][0] }, FIT_CHIP[o.band][1] + ' ' + o.score), o.holds.length ? el('span', { class: 'chip high' }, 'hold') : el('span', { class: 'chip ok' }, 'ready'), o.when ? el('span', { class: 'small muted' }, o.when) : null),
+      o.holds.length ? el('div', { class: 'small', style: 'color:var(--high)' }, 'Hold: ' + o.holds.join('. ')) : null,
+      el('ul', { class: 'small', style: 'margin:0;padding-left:18px' }, o.reasons.map((x) => el('li', {}, x.text + ' (' + pts(x.points) + ')')))))) : el('p', { class: 'muted' }, r.modules.some((m) => m.status !== 'not_purchased') ? 'Nothing worth raising right now.' : 'Modules bought are not available for this client.');
+    // 7. signals
+    const signals = el('div', { style: 'display:grid;gap:6px' }, r.signals.length ? el('ul', { style: 'margin:0;padding-left:18px' }, r.signals.map((x) => el('li', {}, el('b', {}, SIGNAL_KIND[x.kind]), ': ' + x.detail + ' (' + fmtDate(x.happenedOn) + ')'))) : el('p', { class: 'muted small', style: 'margin:0' }, 'No growth plans recorded for this client.'), el('button', { class: 'btn', style: 'justify-self:start', onclick: () => show('signals') }, 'Add or manage growth signals'));
     box.replaceChildren(
       el('div', { class: 'bar' }, el('strong', { style: 'color:var(--navy);font-size:20px;margin-right:auto' }, r.client.name), el('span', { class: 'small muted' }, 'CSM: ' + (r.client.csmName || r.client.csmEmail || 'Unassigned')), el('button', { class: 'btn', onclick: () => (box.hidden = true) }, 'Close')),
+      top,
       sec('1. Administrators', admins),
       sec('2. Employee activity, last 30 days', el('div', { class: 'grid2' }, tiles), e.dailyActive != null ? el('p', { class: 'small muted', style: 'margin:0' }, 'About ' + e.dailyActive + ' employees sign in on a typical day' + (e.activeSeats ? ' (' + Math.min(100, Math.round(e.dailyActive * 100 / e.activeSeats)) + '% of ' + e.activeSeats + ' active seats).' : '.')) : null, chart, others.length ? el('p', { class: 'small', style: 'margin:0' }, 'Other activity: ' + others.map((l) => l.label.toLowerCase() + ' ' + l.last30.toLocaleString('en-NG') + (l.changePct != null ? ' (' + chg(l.changePct) + ')' : '')).join(', ') + '.') : null),
       sec('3. Support tickets and SLA', ...support),
-      sec('4. Modules: in use, idle and open for upsell', modules));
+      sec('4. Modules bought and in use', modules),
+      sec('5. Churn and partial churn', churn),
+      sec('6. Upsell opportunities', upsell),
+      sec('7. Growth plans', signals));
   } catch (err) { box.replaceChildren(el('p', { class: 'muted' }, err.message)); }
 }
 `;

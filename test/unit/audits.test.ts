@@ -202,7 +202,7 @@ describe('fixture scenario', () => {
         inactivity_days_by_health: { 'At Risk': 7, Neutral: 14, Healthy: 30, default: 14 }, escalation_business_days: 3, director_escalation_business_days: 2, escalate_severities: ['urgent', 'high'],
         onboarding_sla_days: 14, radar_seat_growth_pct: 20, radar_seat_growth_days: 90, radar_ewa_volume_kobo: 500_000_000, radar_contractor_min: 5,
         support_reopen_threshold: 1, support_open_days: 7,
-        sla_first_response_high_hours: 4, sla_first_response_normal_hours: 8, sla_resolution_high_hours: 24, sla_resolution_normal_hours: 72, sla_at_risk_pct: 75,
+        sla_first_response_high_hours: 4, sla_first_response_normal_hours: 8, sla_resolution_high_hours: 24, sla_resolution_normal_hours: 72, sla_at_risk_pct: 75, upsell_launch_days: 180, upsell_season_lookahead_days: 60,
       },
       calendar: new BusinessCalendar(),
       seatSource: 'hubspot_paid_seats',

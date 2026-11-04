@@ -162,9 +162,8 @@ describe('organogram, view-as and the CSM dashboard', () => {
     const html = (await http().get('/').expect(200)).text;
     expect(html).not.toContain('id="tab-admin"');
     expect(html).toContain('id="view-dashboard"');
-    expect(html).toContain('<title>Rafiki</title>');
-    expect(html).toContain('(Swahili): friend');
-    expect(html).not.toMatch(/Oyela|Yoruba|CS Director/);
+    expect(html).toContain('<title>CX Internal tool</title>');
+    expect(html).not.toMatch(/Oyela|Rafiki|Yoruba|CS Director/);
     expect(html).toContain("cs_director: 'Head of CX'");
   });
 });

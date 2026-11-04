@@ -52,6 +52,12 @@ const schema = z.object({
   HS_PROP_LAST_ACTIVITY: z.string().default('notes_last_contacted'),
   // Phase 4: where client broadcasts are sent (one or more addresses, separated by commas).
   HS_PROP_PRIMARY_CONTACT_EMAIL: z.string().default('primary_contact_email'),
+  HS_PROP_NPS: z.string().default('nps_score'),
+  HS_PROP_CSAT: z.string().default('csat_score'),
+  /** '0_10': one response, 9-10 promoter, 7-8 passive, 0-6 detractor. 'minus100_100': a company NPS. */
+  NPS_SCALE: z.enum(['0_10', 'minus100_100']).default('0_10'),
+  /** Highest value of the CSAT property: 5 for a 1-5 average, 100 for a percentage. */
+  CSAT_SCALE_MAX: z.coerce.number().default(5),
   // HubSpot support-pipeline stage ids that mean "closed" (default pipeline: 4). Blank = use closed date.
   HS_TICKET_CLOSED_STAGE_IDS: z.string().default('4'),
   HS_TICKET_LOOKBACK_DAYS: z.coerce.number().default(120),

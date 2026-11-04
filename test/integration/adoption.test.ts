@@ -120,12 +120,13 @@ describe('product adoption', () => {
       expect(m.PAYROLL.unusedClients).toContain('Abuja Tech Hub'); // bought, payroll never set up
       const kano = (await http().get('/adoption/clients/1003').set(as('director@example.com')).expect(200)).body;
       expect(Object.fromEntries(kano.modules.map((x: { key: string; status: string }) => [x.key, x.status]))).toMatchObject({ PAYROLL: 'in_use', LEAVE: 'in_use', LOANS: 'unused', EWA: 'in_use', STATUTORY: 'in_use', TIME: 'not_purchased' });
-      expect(kano.upsell.find((u: { key: string }) => u.key === 'TIME')).toMatchObject({ ready: false, holdReason: expect.stringMatching(/urgent or high/) }); // fix the alerts first
+      expect(kano.opportunities.find((u: { module: string }) => u.module === 'TIME').holds).toContain('Urgent or high alerts are open'); // fix the alerts first
       const adebayo = (await http().get('/adoption/clients/1001').set(as('director@example.com')).expect(200)).body;
-      const stat = adebayo.upsell.find((u: { key: string }) => u.key === 'STATUTORY');
-      expect(stat).toMatchObject({ ready: true });
-      expect(stat.reasons.join(' ')).toMatch(/Uses Payroll/);
-      expect(stat.reasons.join(' ')).toMatch(/of customers have it/);
+      const stat = adebayo.opportunities.find((u: { module: string }) => u.module === 'STATUTORY');
+      expect(stat.holds).toEqual([]);
+      const why = stat.reasons.map((r: { text: string }) => r.text).join(' | ');
+      expect(why).toMatch(/Uses Payroll/);
+      expect(why).toMatch(/of customers have it/);
     });
 
     it('keeps each CSM and team lead to their own clients', async () => {
@@ -160,7 +161,7 @@ describe('product adoption', () => {
     const c = (await http().get('/adoption/clients/1003').set(as('director@example.com')).expect(200)).body;
     expect(c.admins).toEqual([]);
     expect(c.employees.lines).toEqual([]);
-    expect(c.upsell).toEqual([]);
+    expect(c.opportunities).toEqual([]);
     expect(c.support.tickets.length).toBeGreaterThan(0); // support still comes from HubSpot
   });
 

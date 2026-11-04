@@ -8,6 +8,7 @@ import { migration004 } from './migrations/004_user_management.js';
 import { migration005 } from './migrations/005_org_chart.js';
 import { migration006 } from './migrations/006_adoption.js';
 import { migration007 } from './migrations/007_head_of_cx.js';
+import { migration008 } from './migrations/008_adoption_intelligence.js';
 
 // Return bigint columns as strings (we convert to BigInt explicitly) and dates as 'YYYY-MM-DD'.
 pg.types.setTypeParser(pg.types.builtins.DATE, (v: string) => v);
@@ -22,6 +23,7 @@ const MIGRATIONS: Array<{ version: string; sql: string }> = [
   { version: '005_org_chart', sql: migration005 },
   { version: '006_adoption', sql: migration006 },
   { version: '007_head_of_cx', sql: migration007 },
+  { version: '008_adoption_intelligence', sql: migration008 },
 ];
 
 @Injectable()

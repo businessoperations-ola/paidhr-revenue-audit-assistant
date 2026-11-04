@@ -1,6 +1,6 @@
-# Rafiki
+# CX Internal tool
 
-*Rafiki* is Swahili for "friend": the CX team's friend in the data, bringing PaidHR's revenue, payroll and customer data together.
+The CX Internal tool brings PaidHR's revenue, payroll and customer data together for the CX team.
 
 Every morning at 04:00 WAT this service snapshots HubSpot and the Control Panel, checks billing and payroll, and alerts the right CSM in Google Chat, Gmail and HubSpot before the CX team starts work.
 
@@ -46,8 +46,14 @@ API (Container App, Google sign-in)
 - **One sign-in, role-based views.** Everyone signs in the same way (Google Workspace). Their role decides what they see: a Workspace area for everyone, plus an Administration area for super admins and Heads of CX (rules, team leads, reconciliation, broadcasts, users).
 - **Organogram.** Each person can report to a Team Lead, Head of CX or super admin (Users screen; CSM to team lead links on the Team leads screen count too). Everyone sees their own work and everyone under them: alerts, the dashboard, expansion radar and reports. The Head of CX, viewers and super admins see everyone. Team leads are emailed a team report with a row per CSM.
 - **CSM dashboard.** Every client in your scope with ARR, health, renewal countdown, seats in use against paid, last contact, payroll status, open alerts and tickets, with a detail panel per client (usage trend, adoption, alerts, tickets, expansion revenue, QBR draft).
-- **Product adoption.** For each client in a CSM's scope: when the primary and secondary admins last logged in and what they did; employee activity (sign-ins, leave, loan and profile-update requests, plus other modules) against the month before; every support ticket with its status, who raised it and SLA state (first reply and resolution, counted in elapsed hours); and modules bought against in use against possible upsell, with the reason for each idea. Idle modules are shown as a churn risk, and upsell is held back while a client has urgent or high alerts. Tickets past their SLA raise a "Support tickets past their SLA" alert to the CSM. Needs four optional Control Panel views (see `docs/control-panel-views.sql`); without them the rest of the screen still works.
-- **View as.** A super admin can switch to see Rafiki as any user (director, team lead, CSM and so on). It is read-only and each switch is logged.
+- **Adoption and upsell (its own section of the app).** Four screens plus one admin screen.
+  - *Adoption rate:* modules in use against modules bought, for the whole portfolio, per module and per client, with the ARR-weighted rate. A module is in use when it was used in the last 30 days (payroll 45, wage access 30, statutory 60).
+  - *Churn risk:* a 0-100 score from adoption, primary-admin activity, employee activity, experience (NPS, CSAT, tickets and SLA) and the commercial picture, plus **partial churn**: the modules a client may drop at renewal (bought but unused, or fading). Every point is listed with its reason, with suggested next steps.
+  - *Upsell opportunities:* each module a client has not bought is scored 0-100 from six things: modules purchased (peer share, related modules), modules in use, experience so far (NPS, CSAT, open and closed tickets, SLA), seasonality (buying seasons by month, with early warning), new module launches, and growth plans (fund raises, expansion, hiring, recorded by CSMs under *Growth signals*). Accounts with high churn risk, At Risk health, urgent alerts or a detractor NPS are held, not pushed. "How it is scored" is shown in the app.
+  - *Modules and seasons* (Head of CX): the module catalogue with launch dates, and the seasonal windows. The seasons ship as starting points (for example performance reviews in Nov to Dec and Jun to Jul): review and confirm them.
+  - NPS and CSAT are read from HubSpot company properties `nps_score` and `csat_score` (`HS_PROP_NPS`, `HS_PROP_CSAT`). Set `NPS_SCALE` (`0_10` or `minus100_100`) and `CSAT_SCALE_MAX` (5 or 100) to match how they are stored.
+  - Underneath: for each client, when the primary and secondary admins last logged in and what they did; employee activity (sign-ins, leave, loan and profile-update requests, other modules) against the month before; and every support ticket with status, who raised it and SLA state (first reply and resolution, in elapsed hours). Tickets past their SLA raise a "Support tickets past their SLA" alert to the CSM. Needs four optional Control Panel views (see `docs/control-panel-views.sql`); without them the rest still works.
+- **View as.** A super admin can switch to see the CX Internal tool as any user (Head of CX, team lead, CSM and so on). It is read-only and each switch is logged.
 This is a portal for PaidHR's own CX team, not a multi-tenant product.
 
 ## Run it locally

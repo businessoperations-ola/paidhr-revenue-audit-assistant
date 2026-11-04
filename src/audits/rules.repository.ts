@@ -26,6 +26,8 @@ const RulesSchema = z.object({
   sla_resolution_high_hours: z.coerce.number().int().min(1).max(2160),
   sla_resolution_normal_hours: z.coerce.number().int().min(1).max(2160),
   sla_at_risk_pct: z.coerce.number().int().min(10).max(99),
+  upsell_launch_days: z.coerce.number().int().min(1).max(730),
+  upsell_season_lookahead_days: z.coerce.number().int().min(0).max(180),
 });
 
 export type AuditRules = z.infer<typeof RulesSchema>;

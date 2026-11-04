@@ -3,11 +3,14 @@ import { FlagRepository } from '../audits/flag.repository.js';
 import { rootMembers } from '../audits/hierarchy.js';
 import { RulesRepository } from '../audits/rules.repository.js';
 import { addDays, daysBetween, type IsoDate } from '../common/calendar.js';
+import { APP_CONFIG, type AppConfig } from '../config/config.js';
 import { Database } from '../db/database.js';
 import type { ControlPanelAccount, HubSpotCompany } from '../domain/types.js';
 import { SnapshotRepository } from '../ingestion/snapshot.repository.js';
 import { OrgService, type Scope } from '../org/org.service.js';
-import { ADJACENT, HEADLINE_EVENTS, MODULES, MODULE_LABEL, eventLabel } from './modules.js';
+import { AdoptionCatalogService } from './catalog.service.js';
+import { adoptionRate, churnRisk, csatPct, npsBand, partialChurn, upsellOpportunities, type ClientFacts, type ModuleFact, type Opportunity, type Scales } from './intelligence.js';
+import { HEADLINE_EVENTS, eventLabel } from './modules.js';
 import { slaFor, slaRulesFrom, type SlaResult } from './sla.js';
 
 export type AdminStatus = 'active' | 'quiet' | 'dormant' | 'never';
@@ -38,20 +41,9 @@ export interface ModuleRow {
   label: string;
   status: ModuleStatus;
   events30: number;
+  eventsPrior30: number;
   lastActive: IsoDate | null;
   purchasedOn: IsoDate | null;
-}
-
-export interface UpsellPick {
-  key: string;
-  label: string;
-  /** Share of all customers who have bought it. */
-  peerPct: number;
-  reasons: string[];
-  /** False when the account has problems to fix first. */
-  ready: boolean;
-  holdReason: string | null;
-  score: number;
 }
 
 export interface MatrixRow {
@@ -63,6 +55,8 @@ export interface MatrixRow {
   inUsePct: number | null;
   unusedClients: string[];
   upsellClients: Array<{ hubspotId: string; name: string }>;
+  /** Modules bought as a share of all customers in scope, and in use as a share of all of them. */
+  inUseOfAllPct: number;
 }
 
 export interface ClientAdoptionSummary {
@@ -86,6 +80,14 @@ export interface ClientAdoptionSummary {
   slaAtRisk: number;
   modules: { known: boolean; purchased: number; inUse: number; unused: number };
   upsellReady: number;
+  arrKobo: bigint | null;
+  daysToRenewal: number | null;
+  adoption: { purchased: number; inUse: number; unused: number; ratePct: number | null; band: 'strong' | 'partial' | 'weak' | null };
+  churn: { score: number; level: 'high' | 'medium' | 'low'; reasons: Array<{ points: number; text: string }> };
+  partial: { level: 'high' | 'medium' | 'none'; modules: Array<{ module: string; label: string; risk: 'high' | 'medium'; reasons: string[] }> };
+  experience: { nps: number | null; npsBand: string | null; csat: number | null; csatPct: number | null; openTickets: number; closedTickets90: number };
+  /** The best three modules to raise, with the points behind each. */
+  topOpportunities: Array<{ module: string; label: string; score: number; band: string; held: boolean }>;
 }
 
 const HEADLINE = new Set(HEADLINE_EVENTS);
@@ -104,6 +106,8 @@ export class AdoptionService {
     @Inject(SnapshotRepository) private readonly snapshots: SnapshotRepository,
     @Inject(FlagRepository) private readonly flags: FlagRepository,
     @Inject(RulesRepository) private readonly rules: RulesRepository,
+    @Inject(AdoptionCatalogService) private readonly catalog: AdoptionCatalogService,
+    @Inject(APP_CONFIG) private readonly cfg: AppConfig,
   ) {}
 
   // ------------------------------------------------------------------ overview
@@ -113,8 +117,40 @@ export class AdoptionService {
     if (!ctx) return null;
     const want = csm?.toLowerCase();
     const inScope = ctx.companies.filter((c) => (want ? c.csmEmail?.toLowerCase() === want : scope.all || OrgService.includes(scope, c.csmEmail)));
-    const clients = inScope.map((c) => this.summary(ctx, c));
-    return { asOf: ctx.asOf, modulesKnown: ctx.moduleRows.size > 0, matrix: this.matrix(ctx, inScope), clients };
+    const uctx = this.upsellContext(ctx);
+    const assessed = new Map(inScope.map((c) => [c.hubspotId, this.assess(ctx, c, uctx)]));
+    const clients = inScope.map((c) => assessed.get(c.hubspotId)!.summary);
+    const opportunities = inScope.flatMap((c) => assessed.get(c.hubspotId)!.opps.filter((o) => o.score >= 20).map((o) => ({
+      hubspotId: c.hubspotId, client: c.name, csmName: c.csmName, arrKobo: c.arrKobo, module: o.module, label: o.label, score: o.score, band: o.band,
+      held: o.holds.length > 0, holds: o.holds, isNewLaunch: o.isNewLaunch, when: o.when, reasons: o.reasons.slice(0, 5),
+    }))).sort((a, b) => b.score - a.score);
+    return { asOf: ctx.asOf, modulesKnown: ctx.moduleRows.size > 0, matrix: this.matrix(ctx, inScope, assessed), portfolio: this.portfolio(clients, inScope), clients, opportunities, newLaunches: ctx.catalog.filter((m) => m.active && m.launchedOn && daysBetween(m.launchedOn, ctx.asOf) >= 0 && daysBetween(m.launchedOn, ctx.asOf) <= ctx.rules.upsell_launch_days).map((m) => ({ key: m.key, label: m.label, launchedOn: m.launchedOn, note: m.launchNote })) };
+  }
+
+  /** Adoption rate for the whole portfolio, and how it splits into churn, partial churn and upsell. */
+  private portfolio(clients: ClientAdoptionSummary[], companies: HubSpotCompany[]) {
+    const arr = new Map(companies.map((c) => [c.hubspotId, c.arrKobo ?? 0n]));
+    const withModules = clients.filter((c) => c.adoption.purchased > 0);
+    const bought = withModules.reduce((n, c) => n + c.adoption.purchased, 0);
+    const used = withModules.reduce((n, c) => n + c.adoption.inUse, 0);
+    const totalArr = withModules.reduce((n, c) => n + (arr.get(c.hubspotId) ?? 0n), 0n);
+    const weighted = totalArr === 0n ? null : Number(withModules.reduce((n, c) => n + BigInt(Math.round((c.adoption.ratePct ?? 0) * 100)) * (arr.get(c.hubspotId) ?? 0n), 0n) / (totalArr * 100n));
+    const sumArr = (xs: ClientAdoptionSummary[]) => xs.reduce((n, c) => n + (arr.get(c.hubspotId) ?? 0n), 0n);
+    const high = clients.filter((c) => c.churn.level === 'high');
+    const medium = clients.filter((c) => c.churn.level === 'medium');
+    const partialClients = clients.filter((c) => c.partial.level !== 'none');
+    return {
+      clients: clients.length,
+      withModuleData: withModules.length,
+      modulesBought: bought,
+      modulesInUse: used,
+      adoptionRatePct: bought ? Math.round((used * 100) / bought) : null,
+      adoptionRateArrWeightedPct: weighted,
+      bands: { strong: withModules.filter((c) => c.adoption.band === 'strong').length, partial: withModules.filter((c) => c.adoption.band === 'partial').length, weak: withModules.filter((c) => c.adoption.band === 'weak').length, unknown: clients.length - withModules.length },
+      churn: { high: high.length, medium: medium.length, low: clients.length - high.length - medium.length, highArrKobo: sumArr(high), mediumArrKobo: sumArr(medium) },
+      partialChurn: { clients: partialClients.length, modules: partialClients.reduce((n, c) => n + c.partial.modules.length, 0), arrKobo: sumArr(partialClients) },
+      upsell: { hot: clients.filter((c) => c.topOpportunities[0]?.band === 'hot' && !c.topOpportunities[0].held).length, warm: clients.filter((c) => c.topOpportunities[0]?.band === 'warm' && !c.topOpportunities[0].held).length, held: clients.filter((c) => c.topOpportunities.length > 0 && c.topOpportunities.every((o) => o.held)).length },
+    };
   }
 
   // ------------------------------------------------------------------ one client
@@ -128,15 +164,19 @@ export class AdoptionService {
     const admins = await this.admins(ids, ctx.asOf);
     const [weekly, tickets] = await Promise.all([this.weekly(ids, ctx.asOf), this.tickets(company.hubspotId, ctx)]);
     const lines = this.activityLines(ctx, ids);
+    const a = this.assess(ctx, company, this.upsellContext(ctx));
     return {
       asOf: ctx.asOf,
       client: { hubspotId: company.hubspotId, name: company.name, csmName: company.csmName, csmEmail: company.csmEmail },
-      summary: this.summary(ctx, company),
+      summary: a.summary,
       admins,
       employees: { lines, weekly, dailyActive: this.dailyActive(ctx, ids), activeSeats: this.activeSeats(ctx, company) },
       support: tickets,
       modules: this.moduleRows(ctx, company),
-      upsell: this.upsell(ctx, company),
+      churn: { score: a.risk.score, level: a.risk.level, reasons: a.risk.reasons },
+      partialChurn: a.partial,
+      opportunities: a.opps,
+      signals: ctx.signals.filter((x) => x.hubspotId === hubspotId),
     };
   }
 
@@ -147,7 +187,10 @@ export class AdoptionService {
     if (!asOf) return null;
     const d30 = addDays(asOf, -30);
     const d60 = addDays(asOf, -60);
-    const [companies, accounts, rules, flags, admins, activity, daily, modules, tickets] = await Promise.all([
+    const [catalog, windows, signals, companies, accounts, rules, flags, admins, activity, daily, modules, tickets] = await Promise.all([
+      this.catalog.modules(),
+      this.catalog.windows(),
+      this.catalog.signals(),
       this.snapshots.loadCompanies(asOf),
       this.snapshots.loadAccounts(asOf),
       this.rules.load(),
@@ -167,8 +210,8 @@ export class AdoptionService {
         [asOf, d30],
       ),
       this.db.query<{ client_id: string; module: string; purchased_on: IsoDate | null }>('SELECT client_id, module, purchased_on FROM cp_client_module'),
-      this.db.query<{ ticket_id: string; hubspot_company_id: string; priority: string | null; created_at: Date; first_response_at: Date | null; closed_at: Date | null; is_closed: boolean }>(
-        `SELECT ticket_id, hubspot_company_id, priority, created_at, first_response_at, closed_at, is_closed FROM ticket WHERE hubspot_company_id IS NOT NULL AND (NOT is_closed OR created_at > now() - interval '90 days')`,
+      this.db.query<{ ticket_id: string; hubspot_company_id: string; priority: string | null; created_at: Date; first_response_at: Date | null; closed_at: Date | null; is_closed: boolean; reopen_count: number }>(
+        `SELECT ticket_id, hubspot_company_id, priority, created_at, first_response_at, closed_at, is_closed, reopen_count FROM ticket WHERE hubspot_company_id IS NOT NULL AND (NOT is_closed OR created_at > now() - interval '90 days')`,
       ),
     ]);
     const members = rootMembers(accounts);
@@ -177,7 +220,8 @@ export class AdoptionService {
     for (const m of modules.rows) moduleRows.set(m.client_id, (moduleRows.get(m.client_id) ?? new Map()).set(m.module, m.purchased_on));
     const slaRules = slaRulesFrom(rules);
     const now = new Date();
-    return { asOf, companies, accounts, accountsById, members, rules, slaRules, now, flags, admins: admins.rows, activity: activity.rows, daily: daily.rows, moduleRows, tickets: tickets.rows };
+    const scales: Scales = { npsScale: this.cfg.NPS_SCALE, csatMax: this.cfg.CSAT_SCALE_MAX };
+    return { asOf, today: new Date(`${asOf}T00:00:00Z`), catalog, windows, signals, scales, companies, accounts, accountsById, members, rules, slaRules, now, flags, admins: admins.rows, activity: activity.rows, daily: daily.rows, moduleRows, tickets: tickets.rows };
   }
 
   private clientIds(ctx: NonNullable<Awaited<ReturnType<AdoptionService['context']>>>, c: HubSpotCompany): string[] {
@@ -274,7 +318,7 @@ export class AdoptionService {
     const acc = (c.controlPanelId ? ctx.members.get(c.controlPanelId) : undefined) ?? [];
     const within = (d: IsoDate | null, days: number) => d !== null && daysBetween(d, ctx.asOf) <= days;
     const latest = (xs: Array<IsoDate | null>) => xs.reduce<IsoDate | null>((m, x) => (x && (!m || x > m) ? x : m), null);
-    return MODULES.map(({ key, label }) => {
+    return ctx.catalog.filter((m) => m.active).map(({ key, label }) => {
       const rows = ctx.activity.filter((r) => ids.includes(r.client_id) && r.module === key);
       const events30 = rows.reduce((n, r) => n + num(r.last30), 0);
       let last = latest(rows.map((r) => r.last_date));
@@ -283,7 +327,8 @@ export class AdoptionService {
       if (key === 'EWA') { const d = latest(acc.map((a) => a.ewaLastUsedOn)); last = latest([last, d]); used = used || within(d, 30); }
       if (key === 'STATUTORY') { const d = latest(acc.map((a) => a.statutoryLastUsedOn)); last = latest([last, d]); used = used || within(d, 60); }
       const has = bought.has(key);
-      return { key, label, status: !has ? 'not_purchased' : used ? 'in_use' : 'unused', events30, lastActive: last, purchasedOn: bought.get(key) ?? null } satisfies ModuleRow;
+      const prior30 = rows.reduce((n, r) => n + num(r.prior30), 0);
+      return { key, label, status: !has ? 'not_purchased' : used ? 'in_use' : 'unused', events30, eventsPrior30: prior30, lastActive: last, purchasedOn: bought.get(key) ?? null } satisfies ModuleRow;
     });
   }
 
@@ -291,42 +336,51 @@ export class AdoptionService {
   private peerShares(ctx: Ctx): Map<string, number> {
     const known = ctx.companies.filter((c) => this.clientIds(ctx, c).some((id) => ctx.moduleRows.has(id)));
     const out = new Map<string, number>();
-    for (const { key } of MODULES) {
+    for (const { key } of ctx.catalog) {
       const n = known.filter((c) => this.clientIds(ctx, c).some((id) => ctx.moduleRows.get(id)?.has(key))).length;
       out.set(key, known.length ? Math.round((n * 100) / known.length) : 0);
     }
     return out;
   }
 
-  private ready(ctx: Ctx, c: HubSpotCompany): { ready: boolean; reason: string | null } {
-    if (c.healthStatus?.toLowerCase() === 'at risk') return { ready: false, reason: 'Account is At Risk: fix that first' };
-    const mine = ctx.flags.filter((f) => f.hubspotCompanyId === c.hubspotId);
-    if (mine.some((f) => f.severity === 'urgent' || f.severity === 'high')) return { ready: false, reason: 'Has urgent or high alerts open' };
-    return { ready: true, reason: null };
+  // ------------------------------------------------------------------ the scoring
+
+  private facts(ctx: Ctx, c: HubSpotCompany, summary: Omit<ClientAdoptionSummary, 'adoption' | 'churn' | 'partial' | 'experience' | 'topOpportunities' | 'upsellReady'>): ClientFacts {
+    const tk = ctx.tickets.filter((t) => t.hubspot_company_id === c.hubspotId);
+    const mods: ModuleFact[] = this.moduleRows(ctx, c).map((m) => ({ key: m.key, label: m.label, status: m.status, events30: m.events30, eventsPrior30: m.eventsPrior30 }));
+    const myFlags = ctx.flags.filter((f) => f.hubspotCompanyId === c.hubspotId);
+    const acc = c.controlPanelId ? ctx.members.get(c.controlPanelId) : undefined;
+    const seats = this.activeSeats(ctx, c);
+    return {
+      health: c.healthStatus,
+      daysToRenewal: c.contractEndDate ? daysBetween(ctx.asOf, c.contractEndDate) : null,
+      nps: c.nps ?? null,
+      csat: c.csat ?? null,
+      openTickets: summary.openTickets,
+      closedTickets90: tk.filter((t) => t.is_closed).length,
+      slaBreaches: summary.slaBreaches,
+      reopenedTickets: tk.filter((t) => !t.is_closed && t.reopen_count > 0).length,
+      activityChangePct: summary.activityChangePct,
+      engagementPct: summary.engagementPct,
+      primaryAdmin: ctx.admins.some((a) => this.clientIds(ctx, c).includes(a.client_id) && a.level === 'PRIMARY') ? summary.primaryStatus : 'none',
+      payroll: !acc ? 'unknown' : myFlags.some((f) => f.type === 'LATE_PAYROLL') ? 'late' : acc[0]?.payFrequency === null ? 'not_set_up' : 'ok',
+      seatUtilisationPct: seats !== null && c.paidSeats ? Math.round((seats * 100) / c.paidSeats) : null,
+      urgentAlerts: myFlags.filter((f) => f.severity === 'urgent' || f.severity === 'high').length,
+      modules: mods,
+      signals: ctx.signals.filter((x) => x.hubspotId === c.hubspotId).map((x) => ({ kind: x.kind, detail: x.detail, happenedOn: x.happenedOn })),
+    };
   }
 
-  private upsell(ctx: Ctx, c: HubSpotCompany): UpsellPick[] {
-    const rows = this.moduleRows(ctx, c);
-    if (!rows.some((r) => r.status !== 'not_purchased')) return [];
-    const peers = this.peerShares(ctx);
-    const state = this.ready(ctx, c);
-    const inUse = new Set(rows.filter((r) => r.status === 'in_use').map((r) => r.key));
-    return rows
-      .filter((r) => r.status === 'not_purchased')
-      .map((r) => {
-        const reasons: string[] = [];
-        const peer = peers.get(r.key) ?? 0;
-        if (peer > 0) reasons.push(`${peer}% of customers have it`);
-        const adj = (ADJACENT[r.key] ?? []).filter((a) => inUse.has(a.uses));
-        for (const a of adj) reasons.push(`Uses ${MODULE_LABEL[a.uses]} and ${a.because}`);
-        return { key: r.key, label: r.label, peerPct: peer, reasons, ready: state.ready, holdReason: state.reason, score: peer + adj.length * 30 } satisfies UpsellPick;
-      })
-      .sort((a, b) => b.score - a.score);
+  private upsellContext(ctx: Ctx): UpsellContextLite {
+    return {
+      catalog: ctx.catalog, windows: ctx.windows, peerPct: this.peerShares(ctx), today: ctx.today,
+      launchDays: ctx.rules.upsell_launch_days, lookaheadDays: ctx.rules.upsell_season_lookahead_days, signalDays: 180,
+    };
   }
 
   // ------------------------------------------------------------------ summaries
 
-  private summary(ctx: Ctx, c: HubSpotCompany): ClientAdoptionSummary {
+  private baseSummary(ctx: Ctx, c: HubSpotCompany) {
     const ids = this.clientIds(ctx, c);
     const mine = ctx.admins.filter((a) => ids.includes(a.client_id));
     const pick = (level: 'PRIMARY' | 'SECONDARY') => {
@@ -347,34 +401,56 @@ export class AdoptionService {
     const known = ids.some((id) => ctx.moduleRows.has(id));
     return {
       hubspotId: c.hubspotId, name: c.name, csmEmail: c.csmEmail, csmName: c.csmName,
+      arrKobo: c.arrKobo, daysToRenewal: c.contractEndDate ? daysBetween(ctx.asOf, c.contractEndDate) : null,
       primaryLastLoginAt: p.last, primaryDaysSinceLogin: p.days, primaryStatus: p.status,
       secondaryLastLoginAt: s.last, secondaryStatus: s.status,
       dailyActiveEmployees: daily, engagementPct: daily !== null && seats ? Math.min(100, Math.round((daily * 100) / seats)) : null,
       activityLast30: last30, activityChangePct: pctChange(last30, prior30),
       openTickets: sla.length, slaBreaches: sla.filter((r) => r.openBreach).length, slaAtRisk: sla.filter((r) => r.openAtRisk).length,
       modules: { known, purchased: mods.filter((m) => m.status !== 'not_purchased').length, inUse: mods.filter((m) => m.status === 'in_use').length, unused: mods.filter((m) => m.status === 'unused').length },
-      upsellReady: known ? this.upsell(ctx, c).filter((u) => u.ready && (u.reasons.length > 1 || u.peerPct >= 50)).length : 0,
     };
   }
 
+  /** Everything we work out about one client: adoption rate, churn, partial churn, and every upsell option. */
+  private assess(ctx: Ctx, c: HubSpotCompany, uctx: UpsellContextLite) {
+    const base = this.baseSummary(ctx, c);
+    const f = this.facts(ctx, c, base);
+    const known = base.modules.known;
+    const risk = churnRisk(f, ctx.scales);
+    const partial = partialChurn(f, ctx.scales);
+    const opps = known ? upsellOpportunities(f, ctx.scales, uctx, risk) : [];
+    const rate = adoptionRate(f.modules);
+    const summary: ClientAdoptionSummary = {
+      ...base,
+      adoption: { purchased: rate.purchased, inUse: rate.inUse, unused: rate.unused, ratePct: rate.ratePct, band: rate.band },
+      churn: { score: risk.score, level: risk.level, reasons: risk.reasons.slice(0, 5) },
+      partial: { level: partial.level, modules: partial.modules.map((m) => ({ module: m.module, label: m.label, risk: m.risk, reasons: m.reasons.map((r) => r.text) })) },
+      experience: { nps: c.nps ?? null, npsBand: npsBand(c.nps, ctx.scales.npsScale), csat: c.csat ?? null, csatPct: csatPct(c.csat, ctx.scales.csatMax), openTickets: f.openTickets, closedTickets90: f.closedTickets90 },
+      topOpportunities: opps.slice(0, 3).map((o) => ({ module: o.module, label: o.label, score: o.score, band: o.band, held: o.holds.length > 0 })),
+      upsellReady: opps.filter((o) => o.band !== 'cool' && o.holds.length === 0).length,
+    };
+    return { summary, opps, risk, partial, facts: f };
+  }
+
   /** Most purchased against in use against possible upsell, across the clients in scope. */
-  private matrix(ctx: Ctx, scoped: HubSpotCompany[]): MatrixRow[] {
+  private matrix(ctx: Ctx, scoped: HubSpotCompany[], assessed: Map<string, ReturnType<AdoptionService['assess']>>): MatrixRow[] {
     const known = scoped.filter((c) => this.clientIds(ctx, c).some((id) => ctx.moduleRows.has(id)));
-    const rows = known.map((c) => ({ c, mods: this.moduleRows(ctx, c), picks: this.upsell(ctx, c) }));
-    return MODULES.map(({ key, label }) => {
-      const purchased = rows.filter((r) => r.mods.find((m) => m.key === key)!.status !== 'not_purchased');
-      const inUse = purchased.filter((r) => r.mods.find((m) => m.key === key)!.status === 'in_use');
+    const rows = known.map((c) => ({ c, mods: this.moduleRows(ctx, c), opps: assessed.get(c.hubspotId)!.opps }));
+    return ctx.catalog.filter((m) => m.active).map(({ key, label }) => {
+      const purchased = rows.filter((r) => r.mods.find((m) => m.key === key)?.status !== 'not_purchased');
+      const inUse = purchased.filter((r) => r.mods.find((m) => m.key === key)?.status === 'in_use');
       const pickers = rows
-        .map((r) => ({ r, pick: r.picks.find((p) => p.key === key) }))
-        .filter((x) => x.pick && x.pick.ready && (x.pick.reasons.length > 1 || x.pick.peerPct >= 50))
-        .sort((a, b) => b.pick!.score - a.pick!.score);
+        .map((r) => ({ r, o: r.opps.find((x) => x.module === key) }))
+        .filter((x) => x.o && x.o.band !== 'cool' && x.o.holds.length === 0)
+        .sort((a, b) => b.o!.score - a.o!.score);
       return {
         key, label,
         purchased: purchased.length,
         purchasedPct: known.length ? Math.round((purchased.length * 100) / known.length) : 0,
         inUse: inUse.length,
         inUsePct: purchased.length ? Math.round((inUse.length * 100) / purchased.length) : null,
-        unusedClients: purchased.filter((r) => r.mods.find((m) => m.key === key)!.status === 'unused').map((r) => r.c.name),
+        inUseOfAllPct: known.length ? Math.round((inUse.length * 100) / known.length) : 0,
+        unusedClients: purchased.filter((r) => r.mods.find((m) => m.key === key)?.status === 'unused').map((r) => r.c.name),
         upsellClients: pickers.slice(0, 6).map((x) => ({ hubspotId: x.r.c.hubspotId, name: x.r.c.name })),
       } satisfies MatrixRow;
     }).sort((a, b) => b.purchased - a.purchased);
@@ -382,3 +458,4 @@ export class AdoptionService {
 }
 
 type Ctx = NonNullable<Awaited<ReturnType<AdoptionService['context']>>>;
+type UpsellContextLite = import('./intelligence.js').UpsellContext;

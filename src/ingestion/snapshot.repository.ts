@@ -25,12 +25,12 @@ export class SnapshotRepository {
     if (companies.length > 0) {
       await client.query(
         `INSERT INTO hs_company_snapshot (snapshot_date, hubspot_id, name, domain, control_panel_id, csm_name, csm_email,
-            csm_owner_id, industry, contract_end_date, seat_tier, paid_seats, arr_kobo, price_per_seat_monthly_kobo, health_status, last_activity_date, primary_contact_email)
+            csm_owner_id, industry, contract_end_date, seat_tier, paid_seats, arr_kobo, price_per_seat_monthly_kobo, health_status, last_activity_date, primary_contact_email, nps, csat)
          SELECT $1::date, * FROM jsonb_to_recordset($2::jsonb) AS x(
             hubspot_id text, name text, domain text, control_panel_id text, csm_name text, csm_email text,
             csm_owner_id text, industry text, contract_end_date date, seat_tier text, paid_seats int,
             arr_kobo bigint, price_per_seat_monthly_kobo bigint, health_status text, last_activity_date date,
-            primary_contact_email text)`,
+            primary_contact_email text, nps numeric, csat numeric)`,
         [
           date,
           JSON.stringify(
@@ -51,6 +51,8 @@ export class SnapshotRepository {
               health_status: c.healthStatus,
               last_activity_date: c.lastActivityDate,
               primary_contact_email: c.primaryContactEmail,
+              nps: c.nps ?? null,
+              csat: c.csat ?? null,
             })),
           ),
         ],
@@ -144,6 +146,8 @@ export class SnapshotRepository {
       healthStatus: r.health_status,
       lastActivityDate: r.last_activity_date,
       primaryContactEmail: r.primary_contact_email ?? null,
+      nps: r.nps === null || r.nps === undefined ? null : Number(r.nps),
+      csat: r.csat === null || r.csat === undefined ? null : Number(r.csat),
     }));
   }
 

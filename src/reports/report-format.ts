@@ -71,9 +71,9 @@ export function reportHtml(r: ReportData, logoUrl: string | null, appUrl: string
     <div style="font-size:24px;font-weight:700;color:${BRAND.navy}">${h(r.title)}</div>
     <div style="font-size:14px;color:${BRAND.muted};margin-top:4px">${h(r.subtitle)}</div>
     ${r.sections.map(sectionHtml).join('\n')}
-    <div style="margin:28px 0 20px"><a href="${h(appUrl)}" style="display:inline-block;background:${BRAND.blue};color:#ffffff;text-decoration:none;font-weight:600;font-size:14px;padding:10px 20px;border-radius:8px">Open in Rafiki</a></div>
+    <div style="margin:28px 0 20px"><a href="${h(appUrl)}" style="display:inline-block;background:${BRAND.blue};color:#ffffff;text-decoration:none;font-weight:600;font-size:14px;padding:10px 20px;border-radius:8px">Open the CX Internal tool</a></div>
   </td></tr>
-  <tr><td style="background:${BRAND.midnight};padding:14px 28px;font-size:12px;color:#ffffff">PaidHR <span style="color:${BRAND.yellow};font-weight:600">Rafiki</span></td></tr>
+  <tr><td style="background:${BRAND.midnight};padding:14px 28px;font-size:12px;color:#ffffff">PaidHR <span style="color:${BRAND.yellow};font-weight:600">CX Internal tool</span></td></tr>
 </table></td></tr></table></body></html>`;
 }
 
@@ -113,7 +113,7 @@ export function reportText(r: ReportData, appUrl: string): string {
     }
     out.push('');
   }
-  out.push(`Open in Rafiki: ${appUrl}`);
+  out.push(`Open the CX Internal tool: ${appUrl}`);
   return out.join('\n');
 }
 

@@ -16,6 +16,8 @@ export type HubSpotPropertyMap = {
   health: string;
   lastActivity: string;
   primaryContactEmail: string;
+  nps: string;
+  csat: string;
 };
 
 export function propertyMapFromConfig(cfg: AppConfig): HubSpotPropertyMap {
@@ -32,6 +34,8 @@ export function propertyMapFromConfig(cfg: AppConfig): HubSpotPropertyMap {
     health: cfg.HS_PROP_HEALTH,
     lastActivity: cfg.HS_PROP_LAST_ACTIVITY,
     primaryContactEmail: cfg.HS_PROP_PRIMARY_CONTACT_EMAIL,
+    nps: cfg.HS_PROP_NPS,
+    csat: cfg.HS_PROP_CSAT,
   };
 }
 
@@ -44,6 +48,13 @@ function text(v: string | null | undefined): string | null {
   if (v === null || v === undefined) return null;
   const t = v.trim();
   return t === '' ? null : t;
+}
+
+function decimal(v: string | null | undefined): number | null {
+  const t = text(v);
+  if (t === null) return null;
+  const n = Number(t.replace(/,/g, ''));
+  return Number.isFinite(n) ? n : null;
 }
 
 function int(v: string | null | undefined): number | null {
@@ -103,5 +114,7 @@ export function mapCompany(
     healthStatus: text(p[map.health]),
     lastActivityDate: date(p[map.lastActivity]),
     primaryContactEmail: text(p[map.primaryContactEmail]),
+    nps: decimal(p[map.nps]),
+    csat: decimal(p[map.csat]),
   };
 }

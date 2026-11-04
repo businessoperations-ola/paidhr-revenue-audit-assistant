@@ -1,4 +1,4 @@
-// Rafiki: phase 1 Azure infrastructure.
+// CX Internal tool: phase 1 Azure infrastructure.
 //
 // Private by default: Postgres has no public endpoint and lives in a delegated
 // subnet; the Container Apps environment runs in the same VNet; secrets are read

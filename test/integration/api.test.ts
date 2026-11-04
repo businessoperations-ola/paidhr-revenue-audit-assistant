@@ -95,7 +95,7 @@ describe('API with Google sign-in and roles', () => {
     const page = await http().get('/').expect(200);
     expect(page.headers['content-type']).toContain('text/html');
     expect(page.headers['content-security-policy']).toContain("frame-src https://accounts.google.com/gsi/");
-    expect(page.text).toContain('<title>Rafiki</title>');
+    expect(page.text).toContain('<title>CX Internal tool</title>');
     expect(page.text).toContain('data:image/png;base64,'); // logo is embedded
     expect(page.text).not.toMatch(/mailto:[a-z]/); // no help address baked in; it comes from HELP_EMAIL
     expect(page.text).toContain('"ENGAGEMENT_DROUGHT":"No contact within the limit"');
