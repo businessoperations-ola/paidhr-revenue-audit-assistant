@@ -39,4 +39,5 @@ export const ADJACENT: Record<string, Array<{ uses: string; because: string }>> 
   EXPENSES: [{ uses: 'PAYROLL', because: 'can reimburse through payroll' }],
   LEAVE: [{ uses: 'CORE_HR', because: 'keeps employee records here' }],
   CORE_HR: [{ uses: 'PAYROLL', because: 'runs payroll on employee records' }],
+  PERFORMANCE: [{ uses: 'CORE_HR', because: 'keeps employee records here for reviews to build on' }, { uses: 'PAYROLL', because: 'can link reviews to pay' }],
 };

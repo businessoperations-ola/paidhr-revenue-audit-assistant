@@ -78,7 +78,7 @@ export function emailBody(
   const text = [
     greeting,
     '',
-    'Rafiki found the following:',
+    'The CX Internal tool found the following:',
     '',
     ...flags.flatMap((f) => [
       `- [${f.severity.toUpperCase()}] ${f.companyName}: ${FLAG_TITLES[f.type]}`,
@@ -95,7 +95,7 @@ export function emailBody(
   const html = brandedEmailHtml({
     logoUrl,
     heading: flags.some((f) => f.severity === 'urgent') ? 'Urgent: action needed' : 'New audit alerts',
-    intro: [greeting, 'Rafiki found the following:'],
+    intro: [greeting, 'The CX Internal tool found the following:'],
     items: flags.map((f) => ({
       flag: f,
       lines: [
@@ -184,7 +184,7 @@ function outro(route: EscalationRoute): string {
     case 'director':
       return 'Please follow up with the team lead and CSM.';
     case 'director_no_lead':
-      return 'Please follow up with the CSM, and set their team lead in Rafiki (Team leads).';
+      return 'Please follow up with the CSM, and set their team lead in the CX Internal tool (Team leads).';
     case 'director_no_csm':
       return 'Please assign a CSM to these accounts in HubSpot.';
   }
@@ -283,7 +283,7 @@ export function brandedEmailHtml(opts: {
   </td></tr>
   <tr><td style="padding:0 28px 8px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0">${items}</table></td></tr>
   ${opts.footer ? `<tr><td style="padding:12px 28px 24px;font-size:13px;color:${BRAND.muted};border-top:1px solid ${BRAND.line}">${escapeHtml(opts.footer)}</td></tr>` : ''}
-  <tr><td style="background:${BRAND.midnight};padding:14px 28px;font-size:12px;color:#ffffff">PaidHR <span style="color:${BRAND.yellow};font-weight:600">Rafiki</span></td></tr>
+  <tr><td style="background:${BRAND.midnight};padding:14px 28px;font-size:12px;color:#ffffff">PaidHR <span style="color:${BRAND.yellow};font-weight:600">CX Internal tool</span></td></tr>
 </table>
 </td></tr></table></body></html>`;
 }

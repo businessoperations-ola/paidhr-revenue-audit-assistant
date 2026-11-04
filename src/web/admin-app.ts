@@ -14,7 +14,7 @@ export const ADMIN_APP_HTML = /* html */ `<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Rafiki</title>
+<title>CX Internal tool</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
@@ -139,7 +139,7 @@ td strong { color: var(--nav-ink); }
 <div class="strip va" id="vabar" hidden></div>
 <div class="strip" id="strip" hidden>Alerts are in <b>dry-run mode</b>: nothing is sent to CSMs, team leads or HubSpot.</div>
 <header class="top" id="top" hidden>
-  <a class="brand" href="#alerts" aria-label="Rafiki"><img src="${LOGO_BLUE_DATA_URI}" alt="PaidHR" width="86" height="30"><span>Rafiki</span></a>
+  <a class="brand" href="#alerts" aria-label="CX Internal tool"><img src="${LOGO_BLUE_DATA_URI}" alt="PaidHR" width="86" height="30"><span>CX Internal tool</span></a>
   <div class="who" id="who"></div>
 </header>
 <section id="signin" class="signin-page" hidden>
@@ -149,9 +149,9 @@ td strong { color: var(--nav-ink); }
   </div>
   <div class="signin-body">
     <div class="signin-pitch">
-      <h1>Rafiki</h1>
-      <p class="meaning"><b>Rafiki</b> (Swahili): friend.</p>
-      <p>Your CX team's friend in the data. One place for the PaidHR CX team to catch billing and payroll problems early, grow accounts and keep customers.</p>
+      <h1>CX Internal tool</h1>
+      <p class="meaning">PaidHR internal · for the CX team</p>
+      <p>One place for the PaidHR CX team to catch billing and payroll problems early, see product adoption, grow accounts and keep customers.</p>
       <ul class="features">
         <li>Daily checks on billing, payroll and account data, sent to the right CSM</li>
         <li>Leadership, CSM, implementation and support reports</li>
@@ -299,7 +299,7 @@ async function enter() {
   const who = [];
   if (state.me.canViewAs) {
     const groups = [['cs_director', 'Heads of CX'], ['cs_team_lead', 'Team leads'], ['csm', 'CSMs'], ['implementation_manager', 'Implementation'], ['support_specialist', 'Support'], ['viewer', 'Viewers'], ['super_admin', 'Super admins']];
-    const sel = el('select', { id: 'viewas', 'aria-label': 'View Rafiki as', onchange: (e) => { state.viewAs = e.target.value; store('viewAs', state.viewAs || null); enter().catch((err) => notice(err.message, true)); } },
+    const sel = el('select', { id: 'viewas', 'aria-label': 'View as', onchange: (e) => { state.viewAs = e.target.value; store('viewAs', state.viewAs || null); enter().catch((err) => notice(err.message, true)); } },
       el('option', { value: '' }, 'My own view'),
       ...groups.map(([r, label]) => { const ps = state.me.people.filter((p) => p.role === r); return ps.length ? el('optgroup', { label }, ps.map((p) => el('option', { value: p.email, selected: p.email === state.viewAs }, (p.name || p.email)))) : null; }));
     who.push(el('label', { class: 'small' }, 'View as ', sel));
@@ -315,14 +315,18 @@ async function enter() {
 
 const NAV = [
   { v: 'dashboard', label: 'Dashboard', group: 'Workspace', not: ['support_specialist', 'implementation_manager'] },
-  { v: 'adoption', label: 'Adoption', group: 'Workspace', not: ['support_specialist', 'implementation_manager'] },
   { v: 'alerts', label: 'Alerts', group: 'Workspace' },
   { v: 'reports', label: 'Reports', group: 'Workspace' },
   { v: 'cx', label: 'Growth', group: 'Workspace', not: ['support_specialist'] },
   { v: 'support', label: 'Support themes', group: 'Workspace', not: ['csm', 'implementation_manager'] },
+  { v: 'adoption', label: 'Adoption rate', group: 'Adoption & Upsell', not: ['support_specialist', 'implementation_manager'] },
+  { v: 'churn', label: 'Churn risk', group: 'Adoption & Upsell', not: ['support_specialist', 'implementation_manager'] },
+  { v: 'upsell', label: 'Upsell opportunities', group: 'Adoption & Upsell', not: ['support_specialist', 'implementation_manager'] },
+  { v: 'signals', label: 'Growth signals', group: 'Adoption & Upsell', not: ['support_specialist', 'implementation_manager'] },
   { v: 'rules', label: 'Rules', group: 'admin', also: ['cs_team_lead', 'viewer'] },
   { v: 'teams', label: 'Team leads', group: 'admin', also: ['cs_team_lead', 'viewer'] },
   { v: 'recon', label: 'Reconciliation', group: 'admin', also: ['cs_team_lead', 'viewer'] },
+  { v: 'catalog', label: 'Modules and seasons', group: 'admin' },
   { v: 'broadcasts', label: 'Broadcasts', group: 'admin' },
   { v: 'users', label: 'Users', group: 'admin' },
 ];
@@ -347,7 +351,7 @@ function show(view) {
   if (location.hash.slice(1) !== view) history.replaceState(null, '', '#' + view);
   document.querySelectorAll('nav button').forEach((b) => b.setAttribute('aria-current', b.dataset.view === view ? 'page' : 'false'));
   for (const v of ALL_VIEWS) $('view-' + v).hidden = v !== view;
-  ({ alerts: loadFlags, rules: loadRules, teams: loadTeams, recon: loadRecon, dashboard: loadDashboard, adoption: loadAdoption, reports: loadReports, cx: loadCx, support: loadSupport, broadcasts: loadBroadcasts, users: loadUsers })[view]().catch((e) => e.message !== 'unauthorized' && notice(e.message, true));
+  ({ alerts: loadFlags, rules: loadRules, teams: loadTeams, recon: loadRecon, dashboard: loadDashboard, adoption: loadAdoption, churn: loadChurn, upsell: loadUpsell, signals: loadSignals, catalog: loadCatalog, reports: loadReports, cx: loadCx, support: loadSupport, broadcasts: loadBroadcasts, users: loadUsers })[view]().catch((e) => e.message !== 'unauthorized' && notice(e.message, true));
 }
 $('nav').addEventListener('click', (e) => { const b = e.target.closest('button[data-view]'); if (b) show(b.dataset.view); });
 window.addEventListener('hashchange', () => state.me && show(location.hash.slice(1)));

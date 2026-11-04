@@ -8,6 +8,7 @@ import {
   type NestInterceptor,
 } from '@nestjs/common';
 import { map, type Observable } from 'rxjs';
+import { CatalogError } from '../adoption/catalog.service.js';
 import { BroadcastError } from '../broadcasts/broadcast.service.js';
 import { AiDisabledError } from '../cx/cx.service.js';
 
@@ -29,11 +30,11 @@ export class BigIntInterceptor implements NestInterceptor {
 }
 
 /** Turns broadcast and AI problems into the right HTTP status with a readable message. */
-@Catch(BroadcastError, AiDisabledError)
+@Catch(BroadcastError, AiDisabledError, CatalogError)
 export class DomainErrorFilter implements ExceptionFilter {
-  catch(err: BroadcastError | AiDisabledError, host: ArgumentsHost): void {
+  catch(err: BroadcastError | AiDisabledError | CatalogError, host: ArgumentsHost): void {
     const res = host.switchToHttp().getResponse();
-    const statusCode = err instanceof BroadcastError ? err.status : 503;
+    const statusCode = err instanceof BroadcastError || err instanceof CatalogError ? err.status : 503;
     res.status(statusCode).json({ statusCode, message: err.message, error: statusCode === 503 ? 'Service Unavailable' : 'Error' });
   }
 }

@@ -25,7 +25,7 @@ export const FIXTURE_COMPANIES: HubSpotCompany[] = [
     csmName: 'Ngozi Okafor', csmEmail: 'ngozi.okafor@example.com', csmOwnerId: '501', industry: 'Logistics',
     contractEndDate: '2027-03-31', seatTier: '50-99', paidSeats: 50, arrKobo: NGN(1_500_000),
     pricePerSeatMonthlyKobo: NGN(2_500), healthStatus: 'Healthy', lastActivityDate: '2026-10-20',
-    primaryContactEmail: 'hr@adebayo-logistics.example',
+    primaryContactEmail: 'hr@adebayo-logistics.example', nps: 9, csat: 4.6,
   },
   {
     // US-01: 40 × ₦3,000 × 12 = ₦1,440,000 but ARR says ₦1,200,000
@@ -33,7 +33,7 @@ export const FIXTURE_COMPANIES: HubSpotCompany[] = [
     csmName: 'Ngozi Okafor', csmEmail: 'ngozi.okafor@example.com', csmOwnerId: '501', industry: 'FMCG',
     contractEndDate: '2026-12-31', seatTier: '25-49', paidSeats: 40, arrKobo: NGN(1_200_000),
     pricePerSeatMonthlyKobo: NGN(3_000), healthStatus: 'Neutral', lastActivityDate: '2026-10-30',
-    primaryContactEmail: 'people@lekkifoods.example',
+    primaryContactEmail: 'people@lekkifoods.example', nps: 6, csat: 3.2,
   },
   {
     // US-05: parent + 2 sub-accounts have 130 users vs 100 paid seats
@@ -42,7 +42,7 @@ export const FIXTURE_COMPANIES: HubSpotCompany[] = [
     contractEndDate: '2027-06-30', seatTier: '100+', paidSeats: 100, arrKobo: NGN(2_400_000),
     pricePerSeatMonthlyKobo: NGN(2_000), healthStatus: 'Healthy',
     lastActivityDate: '2026-09-20', // US-14: 44 days, Healthy limit is 30
-    primaryContactEmail: 'hr@kanoholdings.example',
+    primaryContactEmail: 'hr@kanoholdings.example', nps: 8, csat: 4.1,
   },
   {
     // US-17: missing Industry and Seat Tier. US-03: no Control Panel ID.
@@ -51,7 +51,7 @@ export const FIXTURE_COMPANIES: HubSpotCompany[] = [
     contractEndDate: '2027-01-31', seatTier: null, paidSeats: 20, arrKobo: NGN(480_000),
     pricePerSeatMonthlyKobo: NGN(2_000), healthStatus: 'At Risk',
     lastActivityDate: '2026-10-24', // US-14: 10 days, At Risk limit is 7
-    primaryContactEmail: null,
+    primaryContactEmail: null, nps: 4, csat: 2.8,
   },
   {
     // US-03: linked to an account that was deactivated
@@ -60,7 +60,7 @@ export const FIXTURE_COMPANIES: HubSpotCompany[] = [
     contractEndDate: '2026-11-30', seatTier: '25-49', paidSeats: 30, arrKobo: NGN(900_000),
     pricePerSeatMonthlyKobo: NGN(2_500), healthStatus: 'At Risk',
     lastActivityDate: null, // US-14: never contacted
-    primaryContactEmail: 'admin@enugusteel.example',
+    primaryContactEmail: 'admin@enugusteel.example', nps: null, csat: null,
   },
   {
     // US-26: signed up 22 days ago, payroll still not configured. 15 × ₦2,000 × 12 = ₦360,000
@@ -68,7 +68,7 @@ export const FIXTURE_COMPANIES: HubSpotCompany[] = [
     csmName: 'Tunde Bello', csmEmail: 'tunde.bello@example.com', csmOwnerId: '502', industry: 'Technology',
     contractEndDate: '2027-10-11', seatTier: '10-24', paidSeats: 15, arrKobo: NGN(360_000),
     pricePerSeatMonthlyKobo: NGN(2_000), healthStatus: 'Neutral', lastActivityDate: '2026-10-30',
-    primaryContactEmail: 'ops@abujatechhub.example; hr@abujatechhub.example',
+    primaryContactEmail: 'ops@abujatechhub.example; hr@abujatechhub.example', nps: 7, csat: 3.9,
   },
 ];
 

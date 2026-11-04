@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   ForbiddenException,
   Get,
   HttpCode,
@@ -19,6 +20,8 @@ import { Roles, type AuthUser } from '../auth/auth.js';
 import { BroadcastService } from '../broadcasts/broadcast.service.js';
 import { todayInLagos, type IsoDate } from '../common/calendar.js';
 import { AdoptionService } from '../adoption/adoption.service.js';
+import { AdoptionCatalogService } from '../adoption/catalog.service.js';
+import { SCORING_NOTES } from '../adoption/intelligence.js';
 import { CxService } from '../cx/cx.service.js';
 import { OrgService } from '../org/org.service.js';
 import { PortfolioService } from '../portfolio/portfolio.service.js';
@@ -350,5 +353,79 @@ export class AdoptionController {
     const c = await this.adoption.client(await this.org.scopeFor(req.user), dateParam(date), hubspotId);
     if (!c) throw new NotFoundException('Client not found');
     return c;
+  }
+}
+
+@Controller('adoption')
+export class AdoptionSetupController {
+  constructor(
+    @Inject(AdoptionService) private readonly adoption: AdoptionService,
+    @Inject(AdoptionCatalogService) private readonly catalog: AdoptionCatalogService,
+    @Inject(SnapshotRepository) private readonly snapshots: SnapshotRepository,
+    @Inject(OrgService) private readonly org: OrgService,
+  ) {}
+
+  /** The modules, buying seasons and scoring rules behind the numbers. Everyone can read it. */
+  @Get('catalog')
+  @Roles('csm', ...MANAGERS)
+  async get() {
+    return { modules: await this.catalog.modules(), windows: await this.catalog.windows(), windowsConfirmed: await this.catalog.windowsConfirmed(), scoring: SCORING_NOTES };
+  }
+
+  @Put('catalog/modules/:key')
+  @Roles('cs_director')
+  updateModule(@Req() req: Req, @Param('key') key: string, @Body() body: unknown) {
+    return this.catalog.updateModule(key, body, req.user.email);
+  }
+
+  @Post('catalog/modules')
+  @Roles('cs_director')
+  addModule(@Req() req: Req, @Body() body: unknown) {
+    return this.catalog.addModule(body, req.user.email);
+  }
+
+  @Put('catalog/seasonality/:module')
+  @Roles('cs_director')
+  setWindows(@Req() req: Req, @Param('module') module: string, @Body() body: { windows?: unknown }) {
+    return this.catalog.setWindows(module, body?.windows, req.user.email);
+  }
+
+  // ------------------------------------------------------------------ growth signals
+
+  /** Fund raises, expansion and hiring plans recorded for the customers in your scope. */
+  @Get('signals')
+  @Roles('csm', ...MANAGERS)
+  async signals(@Req() req: Req) {
+    const scope = await this.org.scopeFor(req.user);
+    const asOf = await this.snapshots.latestSnapshotDate(todayInLagos());
+    const companies = asOf ? (await this.snapshots.loadCompanies(asOf)).filter((c) => OrgService.includes(scope, c.csmEmail)) : [];
+    const names = new Map(companies.map((c) => [c.hubspotId, c.name]));
+    const list = await this.catalog.signals([...names.keys()]);
+    return { clients: companies.map((c) => ({ hubspotId: c.hubspotId, name: c.name })), signals: list.map((x) => ({ ...x, client: names.get(x.hubspotId) ?? x.hubspotId })) };
+  }
+
+  @Post('signals')
+  @Roles('csm', 'cs_team_lead', 'cs_director')
+  async addSignal(@Req() req: Req, @Body() body: { hubspotId?: string }) {
+    await this.ownClient(req.user, String(body?.hubspotId ?? ''));
+    return this.catalog.addSignal(body, req.user.email, todayInLagos());
+  }
+
+  @Delete('signals/:id')
+  @HttpCode(200)
+  @Roles('csm', 'cs_team_lead', 'cs_director')
+  async removeSignal(@Req() req: Req, @Param('id', ParseIntPipe) id: number) {
+    const s = await this.catalog.findSignal(id);
+    if (!s) throw new NotFoundException('Signal not found');
+    await this.ownClient(req.user, s.hubspotId);
+    if (s.addedBy !== req.user.email && req.user.role !== 'cs_director' && req.user.role !== 'super_admin') throw new ForbiddenException('Only the person who added it, or the Head of CX, can remove it');
+    await this.catalog.removeSignal(id, req.user.email);
+    return { removed: true };
+  }
+
+  private async ownClient(user: AuthUser, hubspotId: string): Promise<void> {
+    const asOf = await this.snapshots.latestSnapshotDate(todayInLagos());
+    const company = asOf ? (await this.snapshots.loadCompanies(asOf)).find((c) => c.hubspotId === hubspotId) : undefined;
+    if (!company || !OrgService.includes(await this.org.scopeFor(user), company.csmEmail)) throw new NotFoundException('Client not found');
   }
 }

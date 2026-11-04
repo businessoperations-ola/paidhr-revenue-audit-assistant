@@ -6,7 +6,7 @@
     "imageTag": { "value": "REPLACE_WITH_GIT_SHA" },
     "googleWorkspaceDomain": { "value": "paidhr.com" },
     "googleOAuthClientId": { "value": "REPLACE.apps.googleusercontent.com" },
-    "mailFrom": { "value": "Rafiki <audit-assistant@paidhr.com>" },
+    "mailFrom": { "value": "CX Internal tool <audit-assistant@paidhr.com>" },
     "fallbackAlertEmails": { "value": "cs-leads@paidhr.com" },
     "postgresAdminPassword": {
       "reference": {

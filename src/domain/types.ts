@@ -22,6 +22,10 @@ export interface HubSpotCompany {
   lastActivityDate: IsoDate | null;
   /** Where client broadcasts go (HubSpot company property; may hold several addresses). */
   primaryContactEmail: string | null;
+  /** Latest NPS survey score for the customer, as HubSpot holds it (scale set by NPS_SCALE). */
+  nps?: number | null;
+  /** Latest CSAT score, as HubSpot holds it (scale set by CSAT_SCALE_MAX). */
+  csat?: number | null;
 }
 
 export type PayFrequency = 'MONTHLY' | 'SEMI_MONTHLY' | 'BIWEEKLY' | 'WEEKLY';
