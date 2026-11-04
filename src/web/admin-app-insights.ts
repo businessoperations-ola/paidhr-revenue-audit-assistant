@@ -321,7 +321,7 @@ async function bcWatch(runId) {
 }
 
 /* ---------- Users ---------- */
-const ROLE_NAMES = { super_admin: 'Super admin', cs_director: 'CS Director', cs_team_lead: 'CS Team Lead', csm: 'CSM', implementation_manager: 'Implementation Manager', support_specialist: 'Support Specialist', viewer: 'Viewer' };
+const ROLE_NAMES = { super_admin: 'Super admin', cs_director: 'Head of CX', cs_team_lead: 'CS Team Lead', csm: 'CSM', implementation_manager: 'Implementation Manager', support_specialist: 'Support Specialist', viewer: 'Viewer' };
 const roleOptions = () => Object.entries(ROLE_NAMES).filter(([k]) => k !== 'super_admin' || state.me.role === 'super_admin');
 async function loadUsers() {
   if (!$('us-form').dataset.wired) {

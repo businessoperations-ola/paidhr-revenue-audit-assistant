@@ -30,7 +30,7 @@ const lagosDate = (iso: string): IsoDate => todayInLagos(new Date(iso));
  * - Acknowledging stops escalation, except for engagement droughts: those count as
  *   handled only when a call, meeting or email is logged (which resolves the flag).
  * - Level 0 → team lead after `escalation_business_days` since notification.
- * - Level 1 → CS Directors after `director_escalation_business_days` since the lead escalation.
+ * - Level 1 → Heads of CX after `director_escalation_business_days` since the lead escalation.
  */
 export function decideEscalations(
   flags: StoredFlag[],
@@ -196,7 +196,7 @@ export class EscalationService {
     return new Map(rows.map((r) => [r.csm_email, r.team_lead_email]));
   }
 
-  /** Every CS Director with access; the fallback list if none is set up yet. */
+  /** Every Head of CX with access; the fallback list if none is set up yet. */
   private async directors(): Promise<string[]> {
     const { rows } = await this.db.query<{ email: string }>(
       `SELECT email FROM app_user WHERE active AND role = 'cs_director' ORDER BY email`,

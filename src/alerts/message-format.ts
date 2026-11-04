@@ -64,7 +64,7 @@ export function emailSubject(flags: StoredFlag[]): string {
 export function escalationNote(flags: StoredFlag[], escalate: { severities: string[]; businessDays: number } | null): string | null {
   if (!escalate || !flags.some((f) => escalate.severities.includes(f.severity))) return null;
   const levels = escalate.severities.join(' and ');
-  return `If ${levels} alerts are not acknowledged within ${escalate.businessDays} business days, they go to your team lead, or to the CS Directors if you have none on record.`;
+  return `If ${levels} alerts are not acknowledged within ${escalate.businessDays} business days, they go to your team lead, or to the Heads of CX if you have none on record.`;
 }
 
 export function emailBody(
@@ -78,7 +78,7 @@ export function emailBody(
   const text = [
     greeting,
     '',
-    'Oyela found the following:',
+    'Rafiki found the following:',
     '',
     ...flags.flatMap((f) => [
       `- [${f.severity.toUpperCase()}] ${f.companyName}: ${FLAG_TITLES[f.type]}`,
@@ -95,7 +95,7 @@ export function emailBody(
   const html = brandedEmailHtml({
     logoUrl,
     heading: flags.some((f) => f.severity === 'urgent') ? 'Urgent: action needed' : 'New audit alerts',
-    intro: [greeting, 'Oyela found the following:'],
+    intro: [greeting, 'Rafiki found the following:'],
     items: flags.map((f) => ({
       flag: f,
       lines: [
@@ -156,11 +156,11 @@ export function escalationSubject(route: EscalationRoute, csm: string | null, it
     case 'lead':
       return `Escalation: ${n} for ${who} ${items.length === 1 ? 'needs' : 'need'} follow-up`;
     case 'director':
-      return `Director escalation: ${n} for ${who} still unhandled after team lead`;
+      return `Head of CX escalation: ${n} for ${who} still unhandled after team lead`;
     case 'director_no_lead':
-      return `Director escalation: ${n} for ${who} (no team lead on record)`;
+      return `Head of CX escalation: ${n} for ${who} (no team lead on record)`;
     case 'director_no_csm':
-      return `Director escalation: ${n} on ${who}`;
+      return `Head of CX escalation: ${n} on ${who}`;
   }
 }
 
@@ -180,11 +180,11 @@ function intro(route: EscalationRoute, csm: string | null): string {
 function outro(route: EscalationRoute): string {
   switch (route) {
     case 'lead':
-      return 'Please follow up with the CSM. Anything still unhandled goes to the CS Directors next.';
+      return 'Please follow up with the CSM. Anything still unhandled goes to the Heads of CX next.';
     case 'director':
       return 'Please follow up with the team lead and CSM.';
     case 'director_no_lead':
-      return 'Please follow up with the CSM, and set their team lead in Oyela (Team leads).';
+      return 'Please follow up with the CSM, and set their team lead in Rafiki (Team leads).';
     case 'director_no_csm':
       return 'Please assign a CSM to these accounts in HubSpot.';
   }
@@ -211,8 +211,8 @@ export function escalationChat(route: EscalationRoute, csm: string | null, items
     route === 'lead'
       ? `⏫ *Escalated to team lead: ${n} for ${who}*`
       : route === 'director'
-        ? `⏫⏫ *Escalated to CS Directors: ${n} for ${who}, still unhandled after team lead*`
-        : `⏫⏫ *Escalated to CS Directors: ${n} for ${who}${route === 'director_no_lead' ? ' (no team lead on record)' : ''}*`;
+        ? `⏫⏫ *Escalated to Head of CX: ${n} for ${who}, still unhandled after team lead*`
+        : `⏫⏫ *Escalated to Head of CX: ${n} for ${who}${route === 'director_no_lead' ? ' (no team lead on record)' : ''}*`;
   return [
     head,
     ...items.map(
@@ -283,7 +283,7 @@ export function brandedEmailHtml(opts: {
   </td></tr>
   <tr><td style="padding:0 28px 8px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0">${items}</table></td></tr>
   ${opts.footer ? `<tr><td style="padding:12px 28px 24px;font-size:13px;color:${BRAND.muted};border-top:1px solid ${BRAND.line}">${escapeHtml(opts.footer)}</td></tr>` : ''}
-  <tr><td style="background:${BRAND.midnight};padding:14px 28px;font-size:12px;color:#ffffff">PaidHR <span style="color:${BRAND.yellow};font-weight:600">Oyela</span></td></tr>
+  <tr><td style="background:${BRAND.midnight};padding:14px 28px;font-size:12px;color:#ffffff">PaidHR <span style="color:${BRAND.yellow};font-weight:600">Rafiki</span></td></tr>
 </table>
 </td></tr></table></body></html>`;
 }
@@ -298,7 +298,7 @@ export function escalationHtml(
 ): string {
   return brandedEmailHtml({
     logoUrl,
-    heading: route === 'lead' ? 'Escalation: alerts need follow-up' : 'Director escalation',
+    heading: route === 'lead' ? 'Escalation: alerts need follow-up' : 'Head of CX escalation',
     intro: [intro(route, csm)],
     items: items.map(({ flag: f, businessDaysWaiting }) => ({
       flag: f,

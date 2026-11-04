@@ -14,7 +14,7 @@ export const ADMIN_APP_HTML = /* html */ `<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Oyela</title>
+<title>Rafiki</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
@@ -139,7 +139,7 @@ td strong { color: var(--nav-ink); }
 <div class="strip va" id="vabar" hidden></div>
 <div class="strip" id="strip" hidden>Alerts are in <b>dry-run mode</b>: nothing is sent to CSMs, team leads or HubSpot.</div>
 <header class="top" id="top" hidden>
-  <a class="brand" href="#alerts" aria-label="Oyela"><img src="${LOGO_BLUE_DATA_URI}" alt="PaidHR" width="86" height="30"><span>Oyela</span></a>
+  <a class="brand" href="#alerts" aria-label="Rafiki"><img src="${LOGO_BLUE_DATA_URI}" alt="PaidHR" width="86" height="30"><span>Rafiki</span></a>
   <div class="who" id="who"></div>
 </header>
 <section id="signin" class="signin-page" hidden>
@@ -149,9 +149,9 @@ td strong { color: var(--nav-ink); }
   </div>
   <div class="signin-body">
     <div class="signin-pitch">
-      <h1>Oyela</h1>
-      <p class="meaning"><b>Oyela</b> (Yoruba): to bring forth, to bring to light.</p>
-      <p>Bring your revenue, payroll and customer data to light. One place for the PaidHR CX team to catch problems early, grow accounts and keep customers.</p>
+      <h1>Rafiki</h1>
+      <p class="meaning"><b>Rafiki</b> (Swahili): friend.</p>
+      <p>Your CX team's friend in the data. One place for the PaidHR CX team to catch billing and payroll problems early, grow accounts and keep customers.</p>
       <ul class="features">
         <li>Daily checks on billing, payroll and account data, sent to the right CSM</li>
         <li>Leadership, CSM, implementation and support reports</li>
@@ -164,7 +164,7 @@ td strong { color: var(--nav-ink); }
       <p>Sign in with your PaidHR Google Workspace account. What you see depends on your role.</p>
       <div id="signin-notice" class="notice err" role="alert" hidden></div>
       <div class="gbtn-wrap" id="gbtn"></div>
-      <p class="fine">Only company accounts that an admin has added can sign in. Need access? Ask your CS Director.</p>
+      <p class="fine">Only company accounts that an admin has added can sign in. Need access? Ask your Head of CX.</p>
     </div>
   </div>
 </section>
@@ -197,7 +197,7 @@ td strong { color: var(--nav-ink); }
 
   <section id="view-teams" hidden>
     <h2>Team leads</h2>
-    <p class="muted small">Unacknowledged urgent and high alerts go to the CSM's team lead, then to every CS Director. A CSM with no team lead escalates straight to the directors.</p>
+    <p class="muted small">Unacknowledged urgent and high alerts go to the CSM's team lead, then to every Head of CX. A CSM with no team lead escalates straight to the Head of CX.</p>
     <form class="bar card" id="team-form" style="padding:12px;margin:12px 0" hidden>
       <input id="team-csm" type="email" placeholder="CSM email" required aria-label="CSM email">
       <input id="team-lead" type="email" placeholder="Team lead email" required aria-label="Team lead email">
@@ -224,7 +224,7 @@ const FIELDS = ${JSON.stringify(Object.keys(MANDATORY_FIELDS))};
 const RULE_LABELS = {
   inactivity_days_by_health: 'Max days without contact, by health status',
   escalation_business_days: 'Escalate to team lead after (business days)',
-  director_escalation_business_days: 'Then to directors after (business days)',
+  director_escalation_business_days: 'Then to the Head of CX after (business days)',
   escalate_severities: 'Alert levels that escalate',
   payroll_grace_business_days: 'Late payroll grace (business days)',
   arr_tolerance_kobo: 'ARR tolerance (kobo; 1 = ₦0.01)',
@@ -298,8 +298,8 @@ async function enter() {
   const real = state.me.viewingAs ? state.me.viewingAs.actual : { email: state.me.email, role: state.me.role };
   const who = [];
   if (state.me.canViewAs) {
-    const groups = [['cs_director', 'Directors'], ['cs_team_lead', 'Team leads'], ['csm', 'CSMs'], ['implementation_manager', 'Implementation'], ['support_specialist', 'Support'], ['viewer', 'Viewers'], ['super_admin', 'Super admins']];
-    const sel = el('select', { id: 'viewas', 'aria-label': 'View Oyela as', onchange: (e) => { state.viewAs = e.target.value; store('viewAs', state.viewAs || null); enter().catch((err) => notice(err.message, true)); } },
+    const groups = [['cs_director', 'Heads of CX'], ['cs_team_lead', 'Team leads'], ['csm', 'CSMs'], ['implementation_manager', 'Implementation'], ['support_specialist', 'Support'], ['viewer', 'Viewers'], ['super_admin', 'Super admins']];
+    const sel = el('select', { id: 'viewas', 'aria-label': 'View Rafiki as', onchange: (e) => { state.viewAs = e.target.value; store('viewAs', state.viewAs || null); enter().catch((err) => notice(err.message, true)); } },
       el('option', { value: '' }, 'My own view'),
       ...groups.map(([r, label]) => { const ps = state.me.people.filter((p) => p.role === r); return ps.length ? el('optgroup', { label }, ps.map((p) => el('option', { value: p.email, selected: p.email === state.viewAs }, (p.name || p.email)))) : null; }));
     who.push(el('label', { class: 'small' }, 'View as ', sel));
@@ -360,7 +360,7 @@ const canAck = () => ['csm', 'cs_team_lead', 'cs_director', 'super_admin'].inclu
 
 function stateChip(f) {
   if (f.status === 'resolved') return el('span', { class: 'chip ok' }, 'resolved');
-  if (f.escalationLevel === 2) return el('span', { class: 'chip esc' }, 'with directors');
+  if (f.escalationLevel === 2) return el('span', { class: 'chip esc' }, 'with Head of CX');
   if (f.escalationLevel === 1) return el('span', { class: 'chip esc' }, 'with team lead');
   if (f.acknowledgedAt) return el('span', { class: 'chip ok' }, 'acknowledged');
   return el('span', { class: 'chip low' }, f.notifiedAt ? 'awaiting CSM' : 'not sent yet');
@@ -451,7 +451,7 @@ async function loadTeams() {
   $('teams').replaceChildren(...(rows.length ? rows.map((t) => el('tr', {},
     el('td', {}, t.csmEmail), el('td', {}, t.teamLeadEmail), el('td', { class: 'small muted' }, t.updatedBy + ', ' + fmtDate(t.updatedAt)),
     el('td', {}, canEdit ? el('button', { class: 'btn', onclick: async (e) => { e.stopPropagation(); await api('/team/' + encodeURIComponent(t.csmEmail), { method: 'DELETE' }); notice('Removed'); loadTeams(); } }, 'Remove') : null),
-  )) : [el('tr', {}, el('td', { colspan: '4', class: 'muted' }, 'No team leads set. Escalations go straight to the CS Directors.'))]));
+  )) : [el('tr', {}, el('td', { colspan: '4', class: 'muted' }, 'No team leads set. Escalations go straight to the Head of CX.'))]));
 }
 $('team-form').addEventListener('submit', async (e) => {
   e.preventDefault();

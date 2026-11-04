@@ -86,7 +86,7 @@ describe('message formatting', () => {
     // Without a logo URL it falls back to the word mark.
     expect(emailBody('a@x.com', [flag({})], ack).html).toContain('>PaidHR</span>');
     const esc = escalationHtml('director_no_lead', 'ada@x.com', [{ flag: flag({}), businessDaysWaiting: 3 }], ack, null);
-    expect(esc).toContain('Director escalation');
+    expect(esc).toContain('Head of CX escalation');
     expect(esc).toContain('has no team lead on record');
     expect(esc).toContain('Open 3 business days, not acknowledged.');
   });
@@ -94,7 +94,7 @@ describe('message formatting', () => {
   it('only promises escalation for flags that actually escalate', () => {
     const rules = { severities: ['urgent', 'high'], businessDays: 3 };
     const note = escalationNote([flag({ severity: 'high' })], rules);
-    expect(note).toBe('If urgent and high alerts are not acknowledged within 3 business days, they go to your team lead, or to the CS Directors if you have none on record.');
+    expect(note).toBe('If urgent and high alerts are not acknowledged within 3 business days, they go to your team lead, or to the Heads of CX if you have none on record.');
     expect(emailBody('a@x.com', [flag({})], ack, note).text).toContain(note!);
     expect(escalationNote([flag({ severity: 'low' })], rules)).toBeNull();
     expect(emailBody('a@x.com', [flag({ severity: 'low' })], ack, null).text).not.toContain('team lead');

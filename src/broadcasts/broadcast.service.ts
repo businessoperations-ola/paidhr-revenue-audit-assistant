@@ -99,11 +99,11 @@ export class BroadcastService {
 
   // ------------------------------------------------------------------ access (US-20)
 
-  /** Only super admins and CS Directors, and optionally only people who are also Control Panel admins. */
+  /** Only super admins and Heads of CX, and optionally only people who are also Control Panel admins. */
   async access(user: Actor): Promise<{ allowed: boolean; reason: string | null; canSendToClients: boolean; live: boolean }> {
     const live = this.cfg.BROADCASTS_LIVE;
     if (user.role !== 'super_admin' && user.role !== 'cs_director') {
-      return { allowed: false, reason: 'Broadcasts are limited to super admins and CS Directors.', canSendToClients: false, live };
+      return { allowed: false, reason: 'Broadcasts are limited to super admins and Heads of CX.', canSendToClients: false, live };
     }
     if (this.cfg.BROADCAST_REQUIRE_CP_ADMIN && !(await this.isControlPanelAdmin(user.email))) {
       return { allowed: false, reason: 'Your account is not an admin in the Control Panel.', canSendToClients: false, live };
