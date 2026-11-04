@@ -41,7 +41,7 @@ describe('API with Google sign-in and roles', () => {
     expect(new Set(mine.body.map((f: any) => f.csmEmail))).toEqual(new Set(['ngozi.okafor@example.com']));
 
     const all = await http().get('/flags').set(as('director@example.com')).expect(200);
-    expect(all.body.length).toBe(11);
+    expect(all.body.length).toBe(14);
     expect(all.body[0].severity).toBe('urgent'); // most severe first
 
     const other = all.body.find((f: any) => f.csmEmail === 'tunde.bello@example.com');
@@ -78,7 +78,7 @@ describe('API with Google sign-in and roles', () => {
 
   it('returns the latest reconciliation and hierarchy report to managers', async () => {
     const res = await http().get('/reports/latest').set(as('director@example.com')).expect(200);
-    expect(res.body.summary.reconciliation).toMatchObject({ matched: 3 });
+    expect(res.body.summary.reconciliation).toMatchObject({ matched: 4 });
     await http().get('/reports/latest').set(as('ngozi.okafor@example.com')).expect(403);
   });
 

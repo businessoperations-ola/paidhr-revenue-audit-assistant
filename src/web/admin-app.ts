@@ -1,5 +1,6 @@
 import { FLAG_TITLES } from '../alerts/message-format.js';
 import { MANDATORY_FIELDS } from '../audits/hygiene.audit.js';
+import { INSIGHTS_HTML, INSIGHTS_JS } from './admin-app-insights.js';
 import { LOGO_BLUE_DATA_URI, LOGO_WHITE_DATA_URI } from './brand/logos.js';
 
 /**
@@ -189,6 +190,7 @@ td strong { color: var(--nav-ink); }
     <h2 style="margin-top:20px;font-size:16px">Accounts with sub-accounts</h2>
     <div class="card table-wrap" style="margin-top:8px"><table><thead><tr><th>Parent account</th><th>Sub-accounts</th><th>Active users</th></tr></thead><tbody id="tree"></tbody></table></div>
   </section>
+${INSIGHTS_HTML}
 </main>
 
 <script>
@@ -274,12 +276,12 @@ async function enter() {
 }
 
 function show(view) {
-  if (!['alerts', 'rules', 'teams', 'recon'].includes(view)) view = 'alerts';
+  if (!ALL_VIEWS.includes(view)) view = 'alerts';
   state.view = view;
   if (location.hash.slice(1) !== view) history.replaceState(null, '', '#' + view);
   document.querySelectorAll('nav button').forEach((b) => b.setAttribute('aria-current', b.dataset.view === view ? 'page' : 'false'));
-  for (const v of ['alerts', 'rules', 'teams', 'recon']) $('view-' + v).hidden = v !== view;
-  ({ alerts: loadFlags, rules: loadRules, teams: loadTeams, recon: loadRecon })[view]().catch((e) => e.message !== 'unauthorized' && notice(e.message, true));
+  for (const v of ALL_VIEWS) $('view-' + v).hidden = v !== view;
+  ({ alerts: loadFlags, rules: loadRules, teams: loadTeams, recon: loadRecon, reports: loadReports, cx: loadCx, support: loadSupport, broadcasts: loadBroadcasts })[view]().catch((e) => e.message !== 'unauthorized' && notice(e.message, true));
 }
 $('nav').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) show(b.dataset.view); });
 window.addEventListener('hashchange', () => state.me && show(location.hash.slice(1)));
@@ -410,6 +412,7 @@ async function loadRecon() {
   $('tree').replaceChildren(...(tree.length ? tree.map((h) => el('tr', {}, el('td', {}, h.parentName, el('div', { class: 'mono muted' }, h.parentClientId)), el('td', {}, h.subAccountCount), el('td', {}, h.totalActiveUsers))) : [el('tr', {}, el('td', { colspan: '3', class: 'muted' }, 'No accounts with sub-accounts.'))]));
 }
 
+${INSIGHTS_JS}
 start().catch((e) => notice(e.message, true));
 </script>
 </body>

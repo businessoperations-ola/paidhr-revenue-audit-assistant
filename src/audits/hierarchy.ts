@@ -56,3 +56,31 @@ export function buildRollups(accounts: ControlPanelAccount[]): Map<string, Accou
   }
   return rollups;
 }
+
+/** For each top-level active account, every active account under it (itself included). */
+export function rootMembers(accounts: ControlPanelAccount[]): Map<string, ControlPanelAccount[]> {
+  const active = accounts.filter((a) => a.isActive);
+  const byId = new Map(active.map((a) => [a.clientId, a]));
+  const children = new Map<string, ControlPanelAccount[]>();
+  for (const a of active) {
+    if (a.parentClientId && byId.has(a.parentClientId)) {
+      children.set(a.parentClientId, [...(children.get(a.parentClientId) ?? []), a]);
+    }
+  }
+  const out = new Map<string, ControlPanelAccount[]>();
+  for (const root of active) {
+    if (root.parentClientId && byId.has(root.parentClientId)) continue;
+    const seen = new Set<string>([root.clientId]);
+    const members = [root];
+    const queue = [...(children.get(root.clientId) ?? [])];
+    while (queue.length > 0) {
+      const next = queue.shift()!;
+      if (seen.has(next.clientId)) continue;
+      seen.add(next.clientId);
+      members.push(next);
+      queue.push(...(children.get(next.clientId) ?? []));
+    }
+    out.set(root.clientId, members);
+  }
+  return out;
+}

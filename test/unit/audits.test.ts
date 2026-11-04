@@ -9,7 +9,7 @@ import { auditSeatChanges } from '../../src/audits/seat-change.audit.js';
 import { auditSeatOverage } from '../../src/audits/seat-overage.audit.js';
 import { BusinessCalendar } from '../../src/common/calendar.js';
 import type { ControlPanelAccount, HubSpotCompany } from '../../src/domain/types.js';
-import { FIXTURE_ACCOUNTS, FIXTURE_COMPANIES } from '../../src/sources/fixtures/fixture.sources.js';
+import { FIXTURE_ACCOUNTS, FIXTURE_COMPANIES, FIXTURE_TICKETS } from '../../src/sources/fixtures/fixture.sources.js';
 
 const NGN = (n: number) => BigInt(Math.round(n * 100));
 
@@ -17,14 +17,15 @@ function company(over: Partial<HubSpotCompany> = {}): HubSpotCompany {
   return {
     hubspotId: 'h1', name: 'Acme', domain: 'acme.example', controlPanelId: 'c1', csmName: 'Ada', csmEmail: 'ada@x.com',
     csmOwnerId: '9', industry: 'Tech', contractEndDate: '2027-01-31', seatTier: 'S', paidSeats: 10,
-    arrKobo: NGN(120_000), pricePerSeatMonthlyKobo: NGN(1_000), healthStatus: 'Healthy', lastActivityDate: '2026-11-01', ...over,
+    arrKobo: NGN(120_000), pricePerSeatMonthlyKobo: NGN(1_000), healthStatus: 'Healthy', lastActivityDate: '2026-11-01', primaryContactEmail: null, ...over,
   };
 }
 
 function account(over: Partial<ControlPanelAccount> = {}): ControlPanelAccount {
   return {
     clientId: 'c1', parentClientId: null, name: 'Acme', isActive: true, activeUsers: 10, contractorUsers: 0,
-    payFrequency: 'MONTHLY', payDay: 25, lastPayrollPayDate: '2026-10-25', lastPayrollCompletedAt: null, ...over,
+    payFrequency: 'MONTHLY', payDay: 25, lastPayrollPayDate: '2026-10-25', lastPayrollCompletedAt: null,
+    createdOn: null, payrollConfiguredOn: null, firstPayrollRunOn: null, ewaLastUsedOn: null, ewaVolume30dKobo: null, statutoryLastUsedOn: null, ...over,
   };
 }
 
@@ -199,9 +200,12 @@ describe('fixture scenario', () => {
       rules: {
         arr_tolerance_kobo: 1, payroll_grace_business_days: 2, mandatory_fields: ['CSM Name', 'Industry', 'Seat Tier', 'Control Panel ID'], seat_history_days: 400,
         inactivity_days_by_health: { 'At Risk': 7, Neutral: 14, Healthy: 30, default: 14 }, escalation_business_days: 3, director_escalation_business_days: 2, escalate_severities: ['urgent', 'high'],
+        onboarding_sla_days: 14, radar_seat_growth_pct: 20, radar_seat_growth_days: 90, radar_ewa_volume_kobo: 500_000_000, radar_contractor_min: 5,
+        support_reopen_threshold: 1, support_open_days: 7,
       },
       calendar: new BusinessCalendar(),
       seatSource: 'hubspot_paid_seats',
+      tickets: FIXTURE_TICKETS.filter((t) => !t.isClosed).map((t) => ({ ticketId: t.ticketId, hubspotCompanyId: t.hubspotCompanyId, subject: t.subject, createdAt: t.createdAt, isClosed: false, reopenCount: 0, sentiment: null })),
     });
     const byType = Object.fromEntries(findings.map((f) => [`${f.type}:${f.companyName}`, f.severity]));
     expect(byType).toMatchObject({
@@ -216,8 +220,11 @@ describe('fixture scenario', () => {
       'ENGAGEMENT_DROUGHT:Kano Holdings Group': 'low',
       'ENGAGEMENT_DROUGHT:Ibadan Clinics': 'high',
       'ENGAGEMENT_DROUGHT:Enugu Steel': 'high',
+      'ONBOARDING_STAGNATION:Abuja Tech Hub': 'medium',
+      'SUPPORT_ESCALATION_RISK:Abuja Tech Hub': 'medium',
+      'SUPPORT_ESCALATION_RISK:Kano Holdings Group': 'medium',
     });
-    expect(findings).toHaveLength(11);
-    expect(reconciliation).toMatchObject({ matched: 3, hubspotOnly: 1, brokenLinks: 1, controlPanelOnly: 1 });
+    expect(findings).toHaveLength(14);
+    expect(reconciliation).toMatchObject({ matched: 4, hubspotOnly: 1, brokenLinks: 1, controlPanelOnly: 1 });
   });
 });

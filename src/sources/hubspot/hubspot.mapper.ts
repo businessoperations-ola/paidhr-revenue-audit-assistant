@@ -15,6 +15,7 @@ export type HubSpotPropertyMap = {
   pricePerSeat: string;
   health: string;
   lastActivity: string;
+  primaryContactEmail: string;
 };
 
 export function propertyMapFromConfig(cfg: AppConfig): HubSpotPropertyMap {
@@ -30,6 +31,7 @@ export function propertyMapFromConfig(cfg: AppConfig): HubSpotPropertyMap {
     pricePerSeat: cfg.HS_PROP_PRICE_PER_SEAT,
     health: cfg.HS_PROP_HEALTH,
     lastActivity: cfg.HS_PROP_LAST_ACTIVITY,
+    primaryContactEmail: cfg.HS_PROP_PRIMARY_CONTACT_EMAIL,
   };
 }
 
@@ -100,5 +102,6 @@ export function mapCompany(
     pricePerSeatMonthlyKobo: parseNgnToKobo(text(p[map.pricePerSeat])),
     healthStatus: text(p[map.health]),
     lastActivityDate: date(p[map.lastActivity]),
+    primaryContactEmail: text(p[map.primaryContactEmail]),
   };
 }

@@ -20,6 +20,8 @@ export interface HubSpotCompany {
   healthStatus: string | null;
   /** Last logged call, meeting or email (HubSpot "Last contacted"), as a WAT date. */
   lastActivityDate: IsoDate | null;
+  /** Where client broadcasts go (HubSpot company property; may hold several addresses). */
+  primaryContactEmail: string | null;
 }
 
 export type PayFrequency = 'MONTHLY' | 'SEMI_MONTHLY' | 'BIWEEKLY' | 'WEEKLY';
@@ -38,6 +40,40 @@ export interface ControlPanelAccount {
   /** Pay date of the most recent completed payroll run. */
   lastPayrollPayDate: IsoDate | null;
   lastPayrollCompletedAt: string | null;
+  /** When the account was created: the start of onboarding (US-26). */
+  createdOn: IsoDate | null;
+  /** When payroll was first set up (pay schedule + employees). Null = not configured yet. */
+  payrollConfiguredOn: IsoDate | null;
+  /** Pay date of the first completed payroll run: time-to-first-value (US-26). */
+  firstPayrollRunOn: IsoDate | null;
+  /** Last day an employee used Earned Wage Access (US-08). */
+  ewaLastUsedOn: IsoDate | null;
+  /** EWA volume withdrawn in the last 30 days, in kobo (expansion radar, US-27). */
+  ewaVolume30dKobo: Kobo | null;
+  /** Last day a statutory remittance was processed (US-08). */
+  statutoryLastUsedOn: IsoDate | null;
+}
+
+export type RevenueCategory = 'UPSELL' | 'CROSS_SELL_EWA' | 'CROSS_SELL_STATUTORY' | 'CROSS_SELL_OTHER';
+
+/** One line of expansion revenue from billing (US-07). */
+export interface RevenueLine {
+  clientId: string;
+  revenueDate: IsoDate;
+  category: RevenueCategory;
+  amountKobo: Kobo;
+}
+
+/** A HubSpot support ticket. Text is already redacted and truncated (US-12, 28). */
+export interface Ticket {
+  ticketId: string;
+  hubspotCompanyId: string | null;
+  subject: string;
+  content: string;
+  priority: string | null;
+  createdAt: string;
+  closedAt: string | null;
+  isClosed: boolean;
 }
 
 export type FlagType =
@@ -50,7 +86,9 @@ export type FlagType =
   | 'SEAT_OVERAGE' // US-05
   | 'MISSING_FIELDS' // US-17
   | 'LATE_PAYROLL' // US-24
-  | 'ENGAGEMENT_DROUGHT'; // US-14
+  | 'ENGAGEMENT_DROUGHT' // US-14
+  | 'ONBOARDING_STAGNATION' // US-26
+  | 'SUPPORT_ESCALATION_RISK'; // CSAT & escalation early warning
 
 export type Severity = 'urgent' | 'high' | 'medium' | 'low';
 

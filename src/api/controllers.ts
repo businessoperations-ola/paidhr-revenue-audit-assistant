@@ -25,6 +25,7 @@ import { Database } from '../db/database.js';
 import { Public, Roles, type AuthUser } from '../auth/auth.js';
 import { JobRunner, JOB_NAMES, type JobName } from '../jobs/job-runner.js';
 import { todayInLagos } from '../common/calendar.js';
+import { CxService } from '../cx/cx.service.js';
 
 type Req = { user: AuthUser };
 
@@ -113,6 +114,7 @@ export class FlagsController {
   constructor(
     @Inject(FlagRepository) private readonly flags: FlagRepository,
     @Inject(Database) private readonly db: Database,
+    @Inject(CxService) private readonly cx: CxService,
   ) {}
 
   /** CSMs only ever see their own portfolio. */
@@ -145,7 +147,9 @@ export class FlagsController {
       'SELECT channel, recipient, kind, status, attempts, error, sent_at FROM alert WHERE flag_id = $1 ORDER BY id',
       [id],
     );
-    return { ...flag, alerts };
+    // US-26: the unblocking playbook Claude wrote for an onboarding alert, when there is one.
+    const playbook = flag.type === 'ONBOARDING_STAGNATION' ? await this.cx.latestPlaybook(id) : null;
+    return { ...flag, alerts, playbook };
   }
 
   @Post(':id/acknowledge')

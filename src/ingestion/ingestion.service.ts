@@ -1,4 +1,5 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import { addDays } from '../common/calendar.js';
 import { buildRollups } from '../audits/hierarchy.js';
 import type { IsoDate } from '../common/calendar.js';
 import { APP_CONFIG, type AppConfig } from '../config/config.js';
@@ -16,6 +17,10 @@ export interface IngestionResult {
   snapshotDate: IsoDate;
   companies: number;
   accounts: number;
+  tickets: number;
+  revenueLines: number;
+  /** Optional data that could not be loaded. Billing audits still ran. */
+  warnings: string[];
 }
 
 /** Pulls HubSpot and Control Panel data and stores it as the snapshot for one date. */
@@ -56,7 +61,25 @@ export class IngestionService {
         this.snapshots.replaceSnapshot(client, snapshotDate, companies, accounts, metrics),
       );
 
-      const counts = { companies: companies.length, accounts: accounts.length };
+      // Phase 3 and 4 data is optional: a missing view or API scope must not stop the billing audits.
+      const warnings: string[] = [];
+      let tickets = 0;
+      let revenueLines = 0;
+      try {
+        const first = (await this.snapshots.ticketCount()) === 0;
+        const since = new Date(`${addDays(snapshotDate, first ? -this.cfg.HS_TICKET_LOOKBACK_DAYS : -3)}T00:00:00Z`);
+        tickets = await this.snapshots.upsertTickets(await this.hubspot.fetchTickets(since.toISOString()));
+      } catch (err) {
+        warnings.push(`Tickets not loaded: ${err instanceof Error ? err.message : String(err)}`);
+      }
+      try {
+        revenueLines = await this.snapshots.replaceRevenueLines(await this.controlPanel.fetchRevenueLines(addDays(snapshotDate, -400)));
+      } catch (err) {
+        warnings.push(`Expansion revenue not loaded: ${err instanceof Error ? err.message : String(err)}`);
+      }
+      for (const w of warnings) this.log.warn(w);
+
+      const counts = { companies: companies.length, accounts: accounts.length, tickets, revenueLines, warnings };
       await this.db.query(
         `UPDATE ingestion_run SET status = 'succeeded', counts = $2, finished_at = now() WHERE id = $1`,
         [runId, counts],

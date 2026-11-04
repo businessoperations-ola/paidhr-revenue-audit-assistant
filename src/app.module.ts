@@ -1,6 +1,13 @@
 import { Module, type DynamicModule, type Provider } from '@nestjs/common';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
+import { ClaudeService, CLAUDE_GENERATOR } from './ai/claude.service.js';
+import { AI_FEATURES, ClaudeAiFeatures, DisabledAiFeatures } from './ai/features.js';
 import { ClaudeRationaleGenerator, RATIONALE_GENERATOR } from './ai/rationale.service.js';
+import { AnalyticsService } from './analytics/analytics.service.js';
+import { BroadcastService } from './broadcasts/broadcast.service.js';
+import { CxService } from './cx/cx.service.js';
+import { ReportBuilder } from './reports/report-builder.js';
+import { ReportService } from './reports/report.service.js';
 import { AlertDispatcher } from './alerts/alert-dispatcher.service.js';
 import { EscalationService } from './alerts/escalation.service.js';
 import {
@@ -19,6 +26,8 @@ import {
   RulesController,
 } from './api/controllers.js';
 import { MeController, TeamController, WebAppController } from './api/admin.controllers.js';
+import { AnalyticsController, BroadcastController, CxController, ReportScheduleController } from './api/phase34.controllers.js';
+import { BigIntInterceptor, DomainErrorFilter } from './api/http.js';
 import { AuditService } from './audits/audit.service.js';
 import { FlagRepository } from './audits/flag.repository.js';
 import { RulesRepository } from './audits/rules.repository.js';
@@ -51,6 +60,11 @@ export function coreProviders(cfg: AppConfig): Provider[] {
     AuditService,
     AlertDispatcher,
     EscalationService,
+    AnalyticsService,
+    CxService,
+    ReportBuilder,
+    ReportService,
+    BroadcastService,
     JobRunner,
     {
       provide: HUBSPOT_SOURCE,
@@ -70,10 +84,18 @@ export function coreProviders(cfg: AppConfig): Provider[] {
         task: new HubSpotTaskSender(hubspot),
       }),
     },
+    // One Claude client for every AI feature. It connects on first use, so no credentials are needed
+    // while all of them are switched off.
+    { provide: CLAUDE_GENERATOR, useFactory: () => new ClaudeService(cfg) },
     {
-      // Only build the Claude client when it will be used, so no credentials are needed otherwise.
       provide: RATIONALE_GENERATOR,
-      useFactory: () => (cfg.AI_RATIONALE_ENABLED ? new ClaudeRationaleGenerator(cfg) : { generate: async () => null }),
+      inject: [CLAUDE_GENERATOR],
+      useFactory: (claude: ClaudeService) => (cfg.AI_RATIONALE_ENABLED ? new ClaudeRationaleGenerator(claude) : { generate: async () => null }),
+    },
+    {
+      provide: AI_FEATURES,
+      inject: [CLAUDE_GENERATOR],
+      useFactory: (claude: ClaudeService) => (cfg.AI_FEATURES_ENABLED ? new ClaudeAiFeatures(claude) : new DisabledAiFeatures()),
     },
   ];
 }
@@ -103,11 +125,17 @@ export class ApiModule {
         RulesController,
         TeamController,
         JobsController,
+        AnalyticsController,
+        ReportScheduleController,
+        CxController,
+        BroadcastController,
       ],
       providers: [
         ...coreProviders(cfg),
         { provide: IDENTITY_VERIFIER, useFactory: () => new GoogleIdentityVerifier(cfg) },
         { provide: APP_GUARD, useClass: AuthGuard },
+        { provide: APP_INTERCEPTOR, useClass: BigIntInterceptor },
+        { provide: APP_FILTER, useClass: DomainErrorFilter },
       ],
     };
   }

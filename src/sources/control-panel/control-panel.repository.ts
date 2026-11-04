@@ -1,6 +1,7 @@
 import pg from 'pg';
 import type { AppConfig } from '../../config/config.js';
-import type { ControlPanelAccount, PayFrequency } from '../../domain/types.js';
+import type { IsoDate } from '../../common/calendar.js';
+import type { ControlPanelAccount, PayFrequency, RevenueCategory, RevenueLine } from '../../domain/types.js';
 import type { ControlPanelSource } from '../source.types.js';
 
 const FREQUENCIES: ReadonlySet<string> = new Set(['MONTHLY', 'SEMI_MONTHLY', 'BIWEEKLY', 'WEEKLY']);
@@ -16,7 +17,16 @@ interface AccountRow {
   pay_day: number | null;
   last_payroll_pay_date: string | Date | null;
   last_payroll_completed_at: string | Date | null;
+  // Added for phases 3 and 4. Absent when the Control Panel view has not been updated yet.
+  created_on?: string | Date | null;
+  payroll_configured_on?: string | Date | null;
+  first_payroll_run_on?: string | Date | null;
+  ewa_last_used_on?: string | Date | null;
+  ewa_volume_30d_kobo?: string | number | bigint | null;
+  statutory_last_used_on?: string | Date | null;
 }
+
+const REVENUE_CATEGORIES: ReadonlySet<string> = new Set(['UPSELL', 'CROSS_SELL_EWA', 'CROSS_SELL_STATUTORY', 'CROSS_SELL_OTHER']);
 
 function isoDate(v: string | Date | null): string | null {
   if (v === null) return null;
@@ -41,6 +51,12 @@ export function mapAccountRow(r: AccountRow): ControlPanelAccount {
         : typeof r.last_payroll_completed_at === 'string'
           ? r.last_payroll_completed_at
           : r.last_payroll_completed_at.toISOString(),
+    createdOn: isoDate(r.created_on ?? null),
+    payrollConfiguredOn: isoDate(r.payroll_configured_on ?? null),
+    firstPayrollRunOn: isoDate(r.first_payroll_run_on ?? null),
+    ewaLastUsedOn: isoDate(r.ewa_last_used_on ?? null),
+    ewaVolume30dKobo: r.ewa_volume_30d_kobo === null || r.ewa_volume_30d_kobo === undefined ? null : BigInt(r.ewa_volume_30d_kobo),
+    statutoryLastUsedOn: isoDate(r.statutory_last_used_on ?? null),
   };
 }
 
@@ -68,12 +84,42 @@ export class ControlPanelRepository implements ControlPanelSource {
   }
 
   async fetchAccounts(): Promise<ControlPanelAccount[]> {
-    const { rows } = await this.pool.query<AccountRow>(
-      `SELECT client_id, parent_client_id, name, is_active, active_users, contractor_users,
-              pay_frequency, pay_day, last_payroll_pay_date, last_payroll_completed_at
-         FROM ${this.schema}.v_accounts`,
+    const base = `client_id, parent_client_id, name, is_active, active_users, contractor_users,
+              pay_frequency, pay_day, last_payroll_pay_date, last_payroll_completed_at`;
+    try {
+      const { rows } = await this.pool.query<AccountRow>(
+        `SELECT ${base}, created_on, payroll_configured_on, first_payroll_run_on,
+                ewa_last_used_on, ewa_volume_30d_kobo, statutory_last_used_on
+           FROM ${this.schema}.v_accounts`,
+      );
+      return rows.map(mapAccountRow);
+    } catch (err) {
+      // 42703 = undefined column: the view has not been updated for phases 3 and 4 yet.
+      // Billing audits keep working; onboarding, adoption and radar data stay empty.
+      if ((err as { code?: string }).code !== '42703') throw err;
+      const { rows } = await this.pool.query<AccountRow>(`SELECT ${base} FROM ${this.schema}.v_accounts`);
+      return rows.map(mapAccountRow);
+    }
+  }
+
+  async fetchRevenueLines(since: IsoDate): Promise<RevenueLine[]> {
+    const { rows } = await this.pool.query<{ client_id: string | number; revenue_date: string | Date; category: string; amount_kobo: string | number | bigint }>(
+      `SELECT client_id, revenue_date, category, amount_kobo FROM ${this.schema}.v_revenue_lines WHERE revenue_date >= $1`,
+      [since],
     );
-    return rows.map(mapAccountRow);
+    return rows
+      .filter((r) => REVENUE_CATEGORIES.has(r.category))
+      .map((r) => ({
+        clientId: String(r.client_id),
+        revenueDate: isoDate(r.revenue_date)!,
+        category: r.category as RevenueCategory,
+        amountKobo: BigInt(r.amount_kobo),
+      }));
+  }
+
+  async fetchAdminEmails(): Promise<string[]> {
+    const { rows } = await this.pool.query<{ email: string }>(`SELECT lower(email) AS email FROM ${this.schema}.v_admin_users`);
+    return rows.map((r) => r.email);
   }
 
   async close(): Promise<void> {

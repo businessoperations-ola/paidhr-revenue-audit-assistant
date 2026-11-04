@@ -48,11 +48,14 @@ describe('phase-1 daily pipeline against Postgres', () => {
       'LATE_PAYROLL:Lekki Foods',
       'MISSING_FIELDS:Enugu Steel',
       'MISSING_FIELDS:Ibadan Clinics',
+      'ONBOARDING_STAGNATION:Abuja Tech Hub',
       'SEAT_OVERAGE:Kano Holdings Group',
+      'SUPPORT_ESCALATION_RISK:Abuja Tech Hub',
+      'SUPPORT_ESCALATION_RISK:Kano Holdings Group',
       'UNLINKED_CONTROL_PANEL_ACCOUNT:Port Harcourt Marine',
       'UNLINKED_HUBSPOT_COMPANY:Ibadan Clinics',
     ]);
-    expect(result).toMatchObject({ audit: { reconciliation: { matched: 3, hubspotOnly: 1, controlPanelOnly: 1, brokenLinks: 1 } } });
+    expect(result).toMatchObject({ audit: { reconciliation: { matched: 4, hubspotOnly: 1, controlPanelOnly: 1, brokenLinks: 1 } } });
     // US-04: Kano has two sub-accounts, 130 users in total.
     expect((result as any).audit.hierarchy).toEqual([
       { parentClientId: 'CP-300', parentName: 'Kano Holdings Group', subAccountCount: 2, totalActiveUsers: 130 },
@@ -79,8 +82,8 @@ describe('phase-1 daily pipeline against Postgres', () => {
     expect(outbox.chats).toHaveLength(4);
     expect(outbox.chats.some((c) => c.text.startsWith('🚨 *Urgent'))).toBe(true);
 
-    // US-15: one HubSpot task per flag that has a HubSpot company (10 of 11), urgent = HIGH, owner = CSM.
-    expect(outbox.tasks).toHaveLength(10);
+    // US-15: one HubSpot task per flag that has a HubSpot company (13 of 14), urgent = HIGH, owner = CSM.
+    expect(outbox.tasks).toHaveLength(13);
     const payrollTask = outbox.tasks.find((t) => t.subject.includes('Payroll run is late'))!;
     expect(payrollTask).toMatchObject({ companyId: '1002', ownerId: '501', priority: 'HIGH' });
 
@@ -126,7 +129,7 @@ describe('phase-1 daily pipeline against Postgres', () => {
     const emailsAfterFirst = outbox.emails.length;
 
     const { rows } = await db.query(`SELECT status, count(*)::int AS n FROM alert WHERE channel = 'google_chat' GROUP BY status`);
-    expect(rows).toEqual([{ status: 'failed', n: 11 }]);
+    expect(rows).toEqual([{ status: 'failed', n: 14 }]);
 
     outbox.failChatTimes = 0;
     await jobs.run('dispatch', '2026-11-03');
@@ -138,7 +141,7 @@ describe('phase-1 daily pipeline against Postgres', () => {
     await start({ AI_RATIONALE_ENABLED: 'true' });
     await jobs.run('daily', '2026-11-03');
     const { rows } = await db.query(`SELECT type FROM audit_flag WHERE ai_rationale IS NOT NULL ORDER BY type`);
-    expect(rows.map((r) => r.type)).toEqual(['ARR_MISMATCH', 'BROKEN_LINK', 'LATE_PAYROLL', 'SEAT_OVERAGE']);
+    expect(rows.map((r) => r.type)).toEqual(['ARR_MISMATCH', 'BROKEN_LINK', 'LATE_PAYROLL', 'SEAT_OVERAGE', 'SUPPORT_ESCALATION_RISK', 'SUPPORT_ESCALATION_RISK']);
     expect(outbox.chats.some((c) => c.text.includes('_Next step:_ Fix Lekki Foods'))).toBe(true);
   });
 
@@ -163,6 +166,6 @@ describe('phase-1 daily pipeline against Postgres', () => {
     await jobs.run('ingest', '2026-11-03');
     await jobs.run('ingest', '2026-11-03');
     const { rows } = await db.query(`SELECT count(*)::int AS n FROM hs_company_snapshot WHERE snapshot_date = '2026-11-03'`);
-    expect(rows[0]!.n).toBe(5);
+    expect(rows[0]!.n).toBe(6);
   });
 });

@@ -4,6 +4,7 @@ import { APP_CONFIG, type AppConfig } from '../config/config.js';
 import { Database } from '../db/database.js';
 import type { ControlPanelAccount, FlagType, Finding, HubSpotCompany } from '../domain/types.js';
 import { SnapshotRepository } from '../ingestion/snapshot.repository.js';
+import { auditOnboarding, auditSupportRisk, type SupportTicket } from '../cx/cx-rules.js';
 import { auditArrMath } from './arr-math.audit.js';
 import { auditEngagement } from './engagement.audit.js';
 import { FlagRepository } from './flag.repository.js';
@@ -27,6 +28,8 @@ export const PHASE1_FLAG_TYPES: FlagType[] = [
   'MISSING_FIELDS',
   'LATE_PAYROLL',
   'ENGAGEMENT_DROUGHT',
+  'ONBOARDING_STAGNATION',
+  'SUPPORT_ESCALATION_RISK',
 ];
 
 export interface AuditRunResult {
@@ -66,6 +69,8 @@ export function runAllAudits(input: {
   rules: import('./rules.repository.js').AuditRules;
   calendar: import('../common/calendar.js').BusinessCalendar;
   seatSource: AppConfig['ARR_SEAT_SOURCE'];
+  /** Open support tickets (phase 4). */
+  tickets?: SupportTicket[];
 }) {
   const { companies, accounts, rules } = input;
   const rollups = buildRollups(accounts);
@@ -98,6 +103,13 @@ export function runAllAudits(input: {
     }),
   );
   findings.push(...auditEngagement(companies, input.today, rules.inactivity_days_by_health));
+  findings.push(...auditOnboarding(accounts, companies, input.today, rules.onboarding_sla_days));
+  findings.push(
+    ...auditSupportRisk(input.tickets ?? [], companies, input.today, {
+      reopenThreshold: rules.support_reopen_threshold,
+      openDays: rules.support_open_days,
+    }),
+  );
 
   return { findings, reconciliation: reconciliation.summary, rollups };
 }
@@ -132,6 +144,7 @@ export class AuditService {
       throw new Error(`Snapshot ${runDate} has no HubSpot companies; refusing to audit`);
     }
     const history = await this.snapshots.loadHistory(addDays(runDate, -rules.seat_history_days), runDate);
+    const tickets = await this.snapshots.loadOpenTickets();
 
     const { findings, reconciliation, rollups } = runAllAudits({
       companies,
@@ -141,6 +154,7 @@ export class AuditService {
       rules,
       calendar,
       seatSource: this.cfg.ARR_SEAT_SOURCE,
+      tickets,
     });
 
     const byType: Partial<Record<FlagType, number>> = {};

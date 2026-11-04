@@ -1,5 +1,6 @@
 import type { AppConfig } from '../../config/config.js';
-import type { HubSpotCompany } from '../../domain/types.js';
+import { redactText } from '../../common/redact.js';
+import type { HubSpotCompany, Ticket } from '../../domain/types.js';
 import type { HubSpotSource, HubSpotTaskInput } from '../source.types.js';
 import {
   mapCompany,
@@ -11,6 +12,9 @@ import {
 
 /** HubSpot's documented association type id for task → company. */
 const TASK_TO_COMPANY_ASSOCIATION = 192;
+/** HubSpot's documented association type id for note → company. */
+const NOTE_TO_COMPANY_ASSOCIATION = 190;
+const MAX_SEARCH_PAGES = 100; // HubSpot search returns at most 10,000 results
 const PAGE_SIZE = 100;
 const MAX_RETRIES = 5;
 
@@ -77,6 +81,84 @@ export class HubSpotClient implements HubSpotSource {
       ],
     });
     return created.id;
+  }
+
+  async createNote(note: { companyId: string; body: string; at: Date }): Promise<string> {
+    const created = await this.request<{ id: string }>('POST', '/crm/v3/objects/notes', {
+      properties: { hs_timestamp: note.at.toISOString(), hs_note_body: note.body },
+      associations: [
+        {
+          to: { id: note.companyId },
+          types: [{ associationCategory: 'HUBSPOT_DEFINED', associationTypeId: NOTE_TO_COMPANY_ASSOCIATION }],
+        },
+      ],
+    });
+    return created.id;
+  }
+
+  /** Tickets changed since `sinceIso`, with their company, redacted and truncated. */
+  async fetchTickets(sinceIso: string): Promise<Ticket[]> {
+    const closedStages = new Set(
+      this.cfg.HS_TICKET_CLOSED_STAGE_IDS.split(',').map((s) => s.trim()).filter(Boolean),
+    );
+    const records: Array<{ id: string; properties: Record<string, string | null | undefined> }> = [];
+    let after: string | undefined;
+    for (let page = 0; page < MAX_SEARCH_PAGES; page += 1) {
+      const res = await this.request<{
+        results: Array<{ id: string; properties: Record<string, string | null | undefined> }>;
+        paging?: { next?: { after: string } };
+      }>('POST', '/crm/v3/objects/tickets/search', {
+        filterGroups: [
+          { filters: [{ propertyName: 'hs_lastmodifieddate', operator: 'GTE', value: String(Date.parse(sinceIso)) }] },
+        ],
+        properties: ['subject', 'content', 'createdate', 'closed_date', 'hs_pipeline_stage', 'hs_ticket_priority'],
+        sorts: [{ propertyName: 'hs_object_id', direction: 'ASCENDING' }],
+        limit: PAGE_SIZE,
+        ...(after ? { after } : {}),
+      });
+      records.push(...res.results);
+      after = res.paging?.next?.after;
+      if (!after) break;
+    }
+    const companyOf = await this.ticketCompanies(records.map((r) => r.id));
+    const iso = (v: string | null | undefined): string | null => {
+      if (!v) return null;
+      const d = new Date(/^\d+$/.test(v) ? Number(v) : v);
+      return Number.isNaN(d.getTime()) ? null : d.toISOString();
+    };
+    return records.map((r) => {
+      const p = r.properties;
+      const stage = p.hs_pipeline_stage ?? '';
+      const closedAt = iso(p.closed_date);
+      const isClosed = closedStages.size > 0 ? closedStages.has(stage) : closedAt !== null;
+      return {
+        ticketId: r.id,
+        hubspotCompanyId: companyOf.get(r.id) ?? null,
+        subject: redactText(p.subject, 200) || '(no subject)',
+        content: redactText(p.content, 500),
+        priority: p.hs_ticket_priority ?? null,
+        createdAt: iso(p.createdate) ?? new Date().toISOString(),
+        closedAt: isClosed ? (closedAt ?? new Date().toISOString()) : null,
+        isClosed,
+      };
+    });
+  }
+
+  private async ticketCompanies(ticketIds: string[]): Promise<Map<string, string>> {
+    const map = new Map<string, string>();
+    for (let i = 0; i < ticketIds.length; i += PAGE_SIZE) {
+      const chunk = ticketIds.slice(i, i + PAGE_SIZE);
+      const res = await this.request<{ results: Array<{ from: { id: string }; to: Array<{ toObjectId: number | string }> }> }>(
+        'POST',
+        '/crm/v4/associations/tickets/companies/batch/read',
+        { inputs: chunk.map((id) => ({ id })) },
+      );
+      for (const r of res.results ?? []) {
+        const first = r.to?.[0];
+        if (first) map.set(String(r.from.id), String(first.toObjectId));
+      }
+    }
+    return map;
   }
 
   private async fetchOwnerEmails(): Promise<Map<string, string>> {
