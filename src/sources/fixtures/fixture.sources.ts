@@ -1,5 +1,10 @@
+import type { IsoDate } from '../../common/calendar.js';
 import type {
+  AdminAction,
+  ClientAdmin,
+  ClientModule,
   ControlPanelAccount,
+  EmployeeActivity,
   HubSpotCompany,
   RevenueLine,
   Ticket,
@@ -151,6 +156,22 @@ export const FIXTURE_TICKETS: Ticket[] = [
   T('T-1014', '1002', 'NHF deduction mismatch in payslip', 'NHF on the payslip does not match the remittance report.', '2026-10-26T09:30:00Z', '2026-10-30T11:00:00Z'),
 ];
 
+const plusHours = (iso: string, h: number) => new Date(Date.parse(iso) + h * 3_600_000).toISOString();
+/** Status, who raised it, and when support first replied, so the SLA clocks have something to measure. */
+const TICKET_EXTRAS: Record<string, { status: string; by: string; replyAfterHours: number | null }> = {
+  'T-1001': { status: 'Waiting on support', by: 'Chidi O.', replyAfterHours: null },
+  'T-1006': { status: 'In progress', by: 'Seun C.', replyAfterHours: 5 },
+  'T-1007': { status: 'Waiting on customer', by: 'Ayo K.', replyAfterHours: 2 },
+  'T-1009': { status: 'In progress', by: 'Tari O.', replyAfterHours: 9 },
+  'T-1012': { status: 'New', by: 'Chidi O.', replyAfterHours: null },
+};
+for (const t of FIXTURE_TICKETS) {
+  const x = TICKET_EXTRAS[t.ticketId];
+  t.statusLabel = t.isClosed ? 'Closed' : (x?.status ?? 'In progress');
+  t.raisedBy = x?.by ?? null;
+  t.firstResponseAt = x ? (x.replyAfterHours === null ? null : plusHours(t.createdAt, x.replyAfterHours)) : plusHours(t.createdAt, 3);
+}
+
 export const FIXTURE_REVENUE: RevenueLine[] = [
   { clientId: 'CP-100', revenueDate: '2026-10-10', category: 'CROSS_SELL_OTHER', amountKobo: NGN(60_000) },
   { clientId: 'CP-100', revenueDate: '2026-10-15', category: 'UPSELL', amountKobo: NGN(300_000) },
@@ -184,6 +205,88 @@ export class FixtureHubSpotSource implements HubSpotSource {
   }
 }
 
+// ---------------------------------------------------------------- adoption fixtures (relative to "now", so the demo always looks current)
+
+const DAY_MS = 86_400_000;
+const at = (now: Date, daysAgo: number, hour = 9, minute = 0): string => {
+  const d = new Date(now.getTime() - daysAgo * DAY_MS);
+  d.setUTCHours(hour, minute, 0, 0);
+  return d.toISOString();
+};
+
+export const FIXTURE_MODULES: ClientModule[] = [
+  ...['PAYROLL', 'CORE_HR', 'LEAVE', 'EWA'].map((module) => ({ clientId: 'CP-100', module, purchasedOn: '2025-03-01' })),
+  ...['PAYROLL', 'CORE_HR', 'LEAVE', 'STATUTORY'].map((module) => ({ clientId: 'CP-200', module, purchasedOn: '2025-06-15' })),
+  ...['PAYROLL', 'CORE_HR', 'LEAVE', 'LOANS', 'EWA', 'STATUTORY'].map((module) => ({ clientId: 'CP-300', module, purchasedOn: '2024-12-01' })),
+  ...['PAYROLL', 'CORE_HR'].map((module) => ({ clientId: 'CP-600', module, purchasedOn: '2026-09-28' })),
+  ...['PAYROLL', 'CORE_HR'].map((module) => ({ clientId: 'CP-700', module, purchasedOn: '2026-10-12' })),
+];
+
+/** Who the admins are. Lekki's primary admin has gone quiet; Kano's secondary has never logged in. */
+export function fixtureAdmins(now: Date): ClientAdmin[] {
+  return [
+    { clientId: 'CP-100', email: 'ifeoma@adebayo-logistics.example', name: 'Ifeoma Adebayo', level: 'PRIMARY', lastLoginAt: at(now, 1, 8, 12) },
+    { clientId: 'CP-100', email: 'musa@adebayo-logistics.example', name: 'Musa Danjuma', level: 'SECONDARY', lastLoginAt: at(now, 9, 14, 40) },
+    { clientId: 'CP-200', email: 'bola@lekkifoods.example', name: 'Bola Ajayi', level: 'PRIMARY', lastLoginAt: at(now, 41, 10, 5) },
+    { clientId: 'CP-200', email: 'seun@lekkifoods.example', name: 'Seun Coker', level: 'SECONDARY', lastLoginAt: at(now, 12, 16, 20) },
+    { clientId: 'CP-300', email: 'halima@kanoholdings.example', name: 'Halima Sani', level: 'PRIMARY', lastLoginAt: at(now, 3, 9, 30) },
+    { clientId: 'CP-300', email: 'yusuf@kanoholdings.example', name: 'Yusuf Bello', level: 'SECONDARY', lastLoginAt: null },
+    { clientId: 'CP-600', email: 'ngozi@phmarine.example', name: 'Ngozi Eke', level: 'PRIMARY', lastLoginAt: at(now, 2, 11, 0) },
+    { clientId: 'CP-700', email: 'tari@abujatech.example', name: 'Tari Okon', level: 'PRIMARY', lastLoginAt: at(now, 6, 13, 15) },
+  ];
+}
+
+export function fixtureAdminActions(now: Date): AdminAction[] {
+  const a = (clientId: string, email: string, daysAgo: number, action: string, hour = 10): AdminAction => ({ clientId, email, at: at(now, daysAgo, hour), action });
+  return [
+    a('CP-100', 'ifeoma@adebayo-logistics.example', 1, 'Approved 6 leave requests', 8),
+    a('CP-100', 'ifeoma@adebayo-logistics.example', 3, 'Ran October payroll', 15),
+    a('CP-100', 'ifeoma@adebayo-logistics.example', 5, 'Added 2 new employees', 9),
+    a('CP-100', 'musa@adebayo-logistics.example', 9, 'Updated pension settings', 14),
+    a('CP-200', 'seun@lekkifoods.example', 12, 'Approved 3 loan requests', 16),
+    a('CP-200', 'bola@lekkifoods.example', 41, 'Opened the payroll run screen', 10),
+    a('CP-300', 'halima@kanoholdings.example', 3, 'Downloaded the September remittance schedule', 9),
+    a('CP-300', 'halima@kanoholdings.example', 4, 'Ran October payroll for Kano Cement', 11),
+    a('CP-300', 'halima@kanoholdings.example', 11, 'Invited 12 employees', 13),
+    a('CP-600', 'ngozi@phmarine.example', 2, 'Edited the pay schedule', 11),
+    a('CP-700', 'tari@abujatech.example', 6, 'Imported employees (14 rows)', 13),
+  ];
+}
+
+/** A small deterministic wobble so charts look real but tests stay stable. */
+const wobble = (n: number) => 0.75 + (((n * 9301 + 49297) % 233280) / 233280) * 0.5;
+
+const ACTIVITY_PROFILE: Array<{ clientId: string; users: number; modules: Array<{ module: string; event: string; perUser: number }> }> = [
+  { clientId: 'CP-100', users: 48, modules: [{ module: 'PLATFORM', event: 'SIGN_IN', perUser: 0.8 }, { module: 'LEAVE', event: 'LEAVE_REQUEST', perUser: 0.06 }, { module: 'CORE_HR', event: 'PROFILE_UPDATE', perUser: 0.04 }, { module: 'EWA', event: 'EWA_REQUEST', perUser: 0.05 }] },
+  { clientId: 'CP-200', users: 40, modules: [{ module: 'PLATFORM', event: 'SIGN_IN', perUser: 0.35 }, { module: 'LEAVE', event: 'LEAVE_REQUEST', perUser: 0.03 }, { module: 'CORE_HR', event: 'PROFILE_UPDATE', perUser: 0.01 }] },
+  { clientId: 'CP-301', users: 45, modules: [{ module: 'PLATFORM', event: 'SIGN_IN', perUser: 0.9 }, { module: 'LEAVE', event: 'LEAVE_REQUEST', perUser: 0.07 }, { module: 'CORE_HR', event: 'PROFILE_UPDATE', perUser: 0.05 }, { module: 'EWA', event: 'EWA_REQUEST', perUser: 0.12 }] },
+  { clientId: 'CP-302', users: 25, modules: [{ module: 'PLATFORM', event: 'SIGN_IN', perUser: 0.7 }, { module: 'LEAVE', event: 'LEAVE_REQUEST', perUser: 0.05 }, { module: 'EWA', event: 'EWA_REQUEST', perUser: 0.1 }] },
+  { clientId: 'CP-600', users: 12, modules: [{ module: 'PLATFORM', event: 'SIGN_IN', perUser: 0.6 }, { module: 'CORE_HR', event: 'PROFILE_UPDATE', perUser: 0.1 }] },
+  { clientId: 'CP-700', users: 14, modules: [{ module: 'PLATFORM', event: 'SIGN_IN', perUser: 0.15 }] },
+];
+
+/** 90 days of activity. Kano bought Loans and nobody uses it; Lekki's use is falling. */
+export function fixtureEmployeeActivity(now: Date, since: IsoDate): EmployeeActivity[] {
+  const out: EmployeeActivity[] = [];
+  const sinceMs = Date.parse(`${since}T00:00:00Z`);
+  for (let back = 0; back < 90; back += 1) {
+    const d = new Date(now.getTime() - back * DAY_MS);
+    if (d.getTime() < sinceMs) break;
+    const dow = d.getUTCDay();
+    if (dow === 0 || dow === 6) continue;
+    const date = d.toISOString().slice(0, 10);
+    ACTIVITY_PROFILE.forEach((p, pi) => {
+      const fade = p.clientId === 'CP-200' ? Math.min(1, 0.35 + back / 60) : 1; // Lekki: busier a few months ago
+      p.modules.forEach((m, mi) => {
+        const events = Math.round(p.users * m.perUser * wobble(back * 31 + pi * 7 + mi) * fade);
+        if (events <= 0) return;
+        out.push({ clientId: p.clientId, date, module: m.module, eventType: m.event, events, activeEmployees: Math.max(1, Math.min(p.users, Math.round(events * (m.event === 'SIGN_IN' ? 0.9 : 0.8)))) });
+      });
+    });
+  }
+  return out;
+}
+
 export class FixtureControlPanelSource implements ControlPanelSource {
   constructor(
     private readonly accounts: ControlPanelAccount[] = FIXTURE_ACCOUNTS,
@@ -197,5 +300,17 @@ export class FixtureControlPanelSource implements ControlPanelSource {
   }
   async fetchAdminEmails(): Promise<string[]> {
     return ['admin@example.com', 'director@example.com'];
+  }
+  async fetchClientAdmins(): Promise<ClientAdmin[]> {
+    return fixtureAdmins(new Date());
+  }
+  async fetchAdminActions(): Promise<AdminAction[]> {
+    return fixtureAdminActions(new Date());
+  }
+  async fetchEmployeeActivity(since: IsoDate): Promise<EmployeeActivity[]> {
+    return fixtureEmployeeActivity(new Date(), since);
+  }
+  async fetchClientModules(): Promise<ClientModule[]> {
+    return FIXTURE_MODULES.map((m) => ({ ...m }));
   }
 }

@@ -200,13 +200,14 @@ export class SnapshotRepository {
   async upsertTickets(tickets: Ticket[]): Promise<number> {
     if (tickets.length === 0) return 0;
     await this.db.query(
-      `INSERT INTO ticket (ticket_id, hubspot_company_id, subject, content, priority, created_at, closed_at, is_closed)
+      `INSERT INTO ticket (ticket_id, hubspot_company_id, subject, content, priority, created_at, closed_at, is_closed, status_label, first_response_at, raised_by)
        SELECT * FROM jsonb_to_recordset($1::jsonb) AS x(
          ticket_id text, hubspot_company_id text, subject text, content text, priority text,
-         created_at timestamptz, closed_at timestamptz, is_closed boolean)
+         created_at timestamptz, closed_at timestamptz, is_closed boolean, status_label text, first_response_at timestamptz, raised_by text)
        ON CONFLICT (ticket_id) DO UPDATE SET
          hubspot_company_id = EXCLUDED.hubspot_company_id, subject = EXCLUDED.subject, content = EXCLUDED.content,
          priority = EXCLUDED.priority, closed_at = EXCLUDED.closed_at, is_closed = EXCLUDED.is_closed,
+         status_label = EXCLUDED.status_label, first_response_at = EXCLUDED.first_response_at, raised_by = EXCLUDED.raised_by,
          reopen_count = ticket.reopen_count + CASE WHEN ticket.is_closed AND NOT EXCLUDED.is_closed THEN 1 ELSE 0 END,
          last_seen_at = now()`,
       [
@@ -214,6 +215,7 @@ export class SnapshotRepository {
           tickets.map((t) => ({
             ticket_id: t.ticketId, hubspot_company_id: t.hubspotCompanyId, subject: t.subject, content: t.content,
             priority: t.priority, created_at: t.createdAt, closed_at: t.closedAt, is_closed: t.isClosed,
+            status_label: t.statusLabel ?? null, first_response_at: t.firstResponseAt ?? null, raised_by: t.raisedBy ?? null,
           })),
         ),
       ],
@@ -244,7 +246,7 @@ export class SnapshotRepository {
   /** Open tickets, for the support early warning. */
   async loadOpenTickets(): Promise<SupportTicket[]> {
     const { rows } = await this.db.query(
-      `SELECT ticket_id, hubspot_company_id, subject, created_at, is_closed, reopen_count, sentiment FROM ticket WHERE NOT is_closed`,
+      `SELECT ticket_id, hubspot_company_id, subject, created_at, is_closed, reopen_count, sentiment, priority, first_response_at, closed_at FROM ticket WHERE NOT is_closed`,
     );
     return rows.map((r) => ({
       ticketId: r.ticket_id,
@@ -254,6 +256,9 @@ export class SnapshotRepository {
       isClosed: r.is_closed,
       reopenCount: r.reopen_count,
       sentiment: r.sentiment,
+      priority: r.priority,
+      firstResponseAt: r.first_response_at instanceof Date ? r.first_response_at.toISOString() : (r.first_response_at ?? null),
+      closedAt: null,
     }));
   }
 }

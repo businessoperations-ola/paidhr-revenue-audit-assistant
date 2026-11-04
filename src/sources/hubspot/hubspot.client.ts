@@ -111,7 +111,7 @@ export class HubSpotClient implements HubSpotSource {
         filterGroups: [
           { filters: [{ propertyName: 'hs_lastmodifieddate', operator: 'GTE', value: String(Date.parse(sinceIso)) }] },
         ],
-        properties: ['subject', 'content', 'createdate', 'closed_date', 'hs_pipeline_stage', 'hs_ticket_priority'],
+        properties: ['subject', 'content', 'createdate', 'closed_date', 'hs_pipeline_stage', 'hs_ticket_priority', this.cfg.HS_PROP_TICKET_FIRST_RESPONSE, ...(this.cfg.HS_PROP_TICKET_RAISED_BY ? [this.cfg.HS_PROP_TICKET_RAISED_BY] : [])],
         sorts: [{ propertyName: 'hs_object_id', direction: 'ASCENDING' }],
         limit: PAGE_SIZE,
         ...(after ? { after } : {}),
@@ -121,6 +121,7 @@ export class HubSpotClient implements HubSpotSource {
       if (!after) break;
     }
     const companyOf = await this.ticketCompanies(records.map((r) => r.id));
+    const stageLabels = await this.stageLabels();
     const iso = (v: string | null | undefined): string | null => {
       if (!v) return null;
       const d = new Date(/^\d+$/.test(v) ? Number(v) : v);
@@ -140,8 +141,23 @@ export class HubSpotClient implements HubSpotSource {
         createdAt: iso(p.createdate) ?? new Date().toISOString(),
         closedAt: isClosed ? (closedAt ?? new Date().toISOString()) : null,
         isClosed,
+        statusLabel: stageLabels.get(stage) ?? (stage || null),
+        firstResponseAt: iso(p[this.cfg.HS_PROP_TICKET_FIRST_RESPONSE]),
+        raisedBy: this.cfg.HS_PROP_TICKET_RAISED_BY ? (redactText(p[this.cfg.HS_PROP_TICKET_RAISED_BY], 40) || null) : null,
       };
     });
+  }
+
+  /** Readable names for ticket pipeline stages. If they cannot be read, the stage id is shown instead. */
+  private async stageLabels(): Promise<Map<string, string>> {
+    const map = new Map<string, string>();
+    try {
+      const res = await this.request<{ results: Array<{ stages: Array<{ id: string; label: string }> }> }>('GET', '/crm/v3/pipelines/tickets');
+      for (const p of res.results ?? []) for (const s of p.stages ?? []) map.set(s.id, s.label);
+    } catch {
+      /* non-fatal: labels fall back to stage ids */
+    }
+    return map;
   }
 
   private async ticketCompanies(ticketIds: string[]): Promise<Map<string, string>> {

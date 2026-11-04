@@ -4,6 +4,21 @@
  * textContent (via el()), never innerHTML. No backticks in here: this is embedded in a template.
  */
 export const INSIGHTS_HTML = /* html */ `
+  <section id="view-adoption" hidden>
+    <div class="bar" style="margin-bottom:12px">
+      <h2 style="margin-right:auto">Product adoption</h2>
+      <label class="small" id="ad-who-wrap">Show <select id="ad-who"></select></label>
+      <input id="ad-search" type="search" placeholder="Search clients" aria-label="Search clients">
+    </div>
+    <p class="muted small" id="ad-asof"></p>
+    <h3 style="margin:12px 0 4px;font-size:16px">Modules: most purchased, in use, and open for upsell</h3>
+    <p class="muted small" id="ad-mod-note"></p>
+    <div class="card table-wrap"><table style="min-width:900px"><thead><tr><th>Module</th><th>Bought by</th><th>In use</th><th>Bought but not used</th><th>Possible upsell</th></tr></thead><tbody id="ad-matrix"></tbody></table></div>
+    <h3 style="margin:24px 0 8px;font-size:16px">Clients</h3>
+    <div class="card table-wrap"><table style="min-width:1000px"><thead><tr><th>Client</th><th>Primary admin</th><th>Secondary admin</th><th>Employees active</th><th>Activity, 30 days</th><th>Support SLA</th><th>Modules in use</th><th>Upsell ready</th></tr></thead><tbody id="ad-clients"></tbody></table></div>
+    <div class="card detail" id="ad-detail" hidden style="margin-top:16px"></div>
+  </section>
+
   <section id="view-dashboard" hidden>
     <div class="bar" style="margin-bottom:12px">
       <h2 id="db-title" style="margin-right:auto">My portfolio</h2>
@@ -104,7 +119,7 @@ export const INSIGHTS_HTML = /* html */ `
 `;
 
 export const INSIGHTS_JS = String.raw`
-const ALL_VIEWS = ['dashboard', 'alerts', 'rules', 'teams', 'recon', 'reports', 'cx', 'support', 'broadcasts', 'users'];
+const ALL_VIEWS = ['dashboard', 'adoption', 'alerts', 'rules', 'teams', 'recon', 'reports', 'cx', 'support', 'broadcasts', 'users'];
 const AUDIENCE_LABELS = { executive: 'Leadership', csm: 'CSM portfolio', implementation: 'Implementation', support: 'Support' };
 const ROLE_AUDIENCES = { csm: ['csm'], implementation_manager: ['implementation'], support_specialist: ['support'] };
 const money = (kobo) => '₦' + (Number(BigInt(kobo) / 100n)).toLocaleString('en-NG');
@@ -448,5 +463,92 @@ async function openClient(id) {
       r.expansionRevenue12m.length ? el('div', {}, el('strong', {}, 'Expansion revenue, last 12 months'), el('ul', { style: 'margin:6px 0' }, r.expansionRevenue12m.map((x) => el('li', {}, (CAT[x.category] || x.category) + ': ' + money(x.amountKobo))))) : null,
       el('div', { id: 'db-qbr', class: 'detail', hidden: true })].filter(Boolean));
   } catch (e) { box.replaceChildren(el('p', { class: 'muted' }, e.message)); }
+}
+
+/* ---------- Adoption ---------- */
+const adState = { data: null };
+const ADMIN_CHIP = { active: ['ok', 'active'], quiet: ['medium', 'quiet'], dormant: ['high', 'dormant'], never: ['low', 'never logged in'] };
+function loginCell(last, days, status) {
+  const [cls, label] = ADMIN_CHIP[status];
+  return el('div', {}, last ? el('div', {}, fmtDate(last), el('span', { class: 'small muted' }, ' · ' + (days === 0 ? 'today' : days + 'd ago'))) : el('div', { class: 'muted small' }, 'Never'), el('span', { class: 'chip ' + cls }, label));
+}
+const SLA_CHIP = { met: ['ok', 'met'], ok: ['low', 'on track'], at_risk: ['medium', 'at risk'], breached: ['urgent', 'breached'] };
+const slaChip = (c, closed) => { const [cls, label] = SLA_CHIP[c.state]; return el('span', {}, el('span', { class: 'chip ' + cls }, label), el('div', { class: 'small muted' }, (Math.round(c.elapsedHours * 10) / 10) + 'h of ' + c.targetHours + 'h')); };
+const chg = (n) => n == null ? '' : (n > 0 ? '+' : '') + n + '%';
+const bar = (pct, color) => el('div', { style: 'height:6px;background:var(--blue-faint);border-radius:3px;width:120px;margin-top:4px' }, el('div', { style: 'height:6px;border-radius:3px;width:' + Math.min(pct || 0, 100) + '%;background:' + color }));
+async function loadAdoption() {
+  const who = $('ad-who');
+  if (!who.dataset.wired) { who.dataset.wired = '1'; who.addEventListener('change', () => loadAdoption().catch((e) => notice(e.message, true))); $('ad-search').addEventListener('input', drawAdClients); }
+  const keep = who.value;
+  const d = await api('/adoption' + (keep ? '?csm=' + encodeURIComponent(keep) : ''));
+  adState.data = d; $('ad-detail').hidden = true;
+  $('ad-who-wrap').hidden = d.people.length <= 1;
+  who.replaceChildren(el('option', { value: '' }, d.people.length > 1 && state.me.role !== 'csm' ? 'Everyone' : 'All my clients'), ...d.people.map((p) => el('option', { value: p.email, selected: p.email === keep }, (p.name || p.email))));
+  who.value = keep;
+  $('ad-asof').textContent = 'Data as of ' + fmtDate(d.asOf) + '. Employee activity covers the last 30 days against the 30 before.';
+  $('ad-mod-note').textContent = d.modulesKnown ? 'Upsell means the client has not bought it, has no urgent or high alerts, and either already uses a related module or most customers have it.' : 'Modules bought are not available yet: the Control Panel view v_client_modules is not connected.';
+  $('ad-matrix').replaceChildren(...(d.matrix.some((m) => m.purchased > 0 || m.upsellClients.length) ? d.matrix.map((m) => el('tr', { style: 'cursor:default' },
+    el('td', {}, el('strong', {}, m.label)),
+    el('td', {}, el('div', {}, m.purchased + (m.purchased === 1 ? ' client' : ' clients') + ' (' + m.purchasedPct + '%)'), bar(m.purchasedPct, 'var(--blue)')),
+    el('td', {}, m.inUsePct == null ? el('span', { class: 'muted small' }, '–') : el('div', {}, m.inUse + ' of ' + m.purchased + ' (' + m.inUsePct + '%)', bar(m.inUsePct, m.inUsePct < 60 ? 'var(--high)' : 'var(--ok)'))),
+    el('td', {}, m.unusedClients.length ? m.unusedClients.map((n) => el('span', { class: 'chip high', style: 'margin:0 4px 4px 0' }, n)) : el('span', { class: 'muted small' }, 'None')),
+    el('td', {}, m.upsellClients.length ? m.upsellClients.map((x) => el('button', { class: 'chip low', style: 'margin:0 4px 4px 0;border:0;cursor:pointer', onclick: () => openAdoption(x.hubspotId) }, x.name)) : el('span', { class: 'muted small' }, 'None right now')))) : [el('tr', {}, el('td', { colspan: '5', class: 'muted' }, 'No module data yet.'))]));
+  drawAdClients();
+}
+function drawAdClients() {
+  const d = adState.data; if (!d) return;
+  const term = $('ad-search').value.trim().toLowerCase();
+  const list = d.clients.filter((c) => !term || c.name.toLowerCase().includes(term)).sort((a, b) => (b.slaBreaches - a.slaBreaches) || ((b.primaryDaysSinceLogin ?? 9999) - (a.primaryDaysSinceLogin ?? 9999)));
+  $('ad-clients').replaceChildren(...(list.length ? list.map((c) => el('tr', { onclick: () => openAdoption(c.hubspotId) },
+    el('td', {}, el('strong', {}, c.name), d.clients.length > 1 && c.csmName ? el('div', { class: 'small muted' }, c.csmName) : null),
+    el('td', {}, loginCell(c.primaryLastLoginAt, c.primaryDaysSinceLogin, c.primaryStatus)),
+    el('td', {}, c.secondaryLastLoginAt || c.secondaryStatus !== 'never' ? loginCell(c.secondaryLastLoginAt, c.secondaryLastLoginAt ? Math.max(0, Math.round((Date.now() - Date.parse(c.secondaryLastLoginAt)) / 86400000)) : null, c.secondaryStatus) : el('span', { class: 'muted small' }, 'None on record')),
+    el('td', {}, c.dailyActiveEmployees == null ? el('span', { class: 'muted small' }, '–') : el('div', {}, c.dailyActiveEmployees + ' a day', el('span', { class: 'small muted' }, c.engagementPct != null ? ' (' + c.engagementPct + '% of seats)' : ''), c.engagementPct != null ? bar(c.engagementPct, c.engagementPct < 30 ? 'var(--high)' : 'var(--blue)') : null)),
+    el('td', {}, el('div', {}, c.activityLast30.toLocaleString('en-NG')), c.activityChangePct == null ? null : el('span', { class: 'small', style: 'font-weight:600;color:' + (c.activityChangePct < -20 ? 'var(--urgent)' : c.activityChangePct < 0 ? 'var(--high)' : 'var(--ok)') }, chg(c.activityChangePct))),
+    el('td', {}, c.openTickets === 0 ? el('span', { class: 'muted small' }, 'No open tickets') : el('div', {}, c.slaBreaches ? el('span', { class: 'chip urgent' }, c.slaBreaches + ' past SLA') : null, c.slaAtRisk ? el('span', { class: 'chip medium', style: 'margin-left:4px' }, c.slaAtRisk + ' at risk') : null, !c.slaBreaches && !c.slaAtRisk ? el('span', { class: 'chip ok' }, c.openTickets + ' on track') : null)),
+    el('td', {}, c.modules.known ? el('div', {}, c.modules.inUse + ' of ' + c.modules.purchased, c.modules.unused ? el('div', { class: 'small', style: 'color:var(--high)' }, c.modules.unused + ' unused') : null) : el('span', { class: 'muted small' }, '–')),
+    el('td', {}, c.upsellReady ? el('span', { class: 'chip ok' }, c.upsellReady + ' ideas') : el('span', { class: 'muted small' }, '–')))) : [el('tr', {}, el('td', { colspan: '8', class: 'muted' }, 'No clients match.'))]));
+}
+async function openAdoption(id) {
+  const box = $('ad-detail'); box.hidden = false; box.replaceChildren(el('p', { class: 'muted' }, 'Loading...')); box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  try {
+    const r = await api('/adoption/clients/' + encodeURIComponent(id));
+    const sec = (title, ...kids) => el('div', { style: 'display:grid;gap:10px' }, el('h3', { style: 'margin:8px 0 0;font-size:17px' }, title), ...kids);
+    const tile = (label, value, note, cls) => el('div', { class: 'card stat' }, el('b', { style: cls ? 'color:var(--' + cls + ')' : '' }, value), el('span', {}, label), note ? el('span', { class: 'small muted' }, note) : null);
+    // 1. administrators
+    const admins = r.admins.length ? el('div', { class: 'grid2' }, r.admins.map((a) => el('div', { class: 'card detail' },
+      el('div', { class: 'bar' }, el('strong', {}, a.name || a.email), el('span', { class: 'chip low' }, a.level === 'PRIMARY' ? 'Primary admin' : 'Secondary admin'), el('span', { class: 'chip ' + ADMIN_CHIP[a.status][0] }, ADMIN_CHIP[a.status][1])),
+      el('div', { class: 'small muted' }, a.email),
+      el('div', {}, a.lastLoginAt ? 'Last login ' + new Date(a.lastLoginAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Africa/Lagos' }) + ' (' + (a.daysSinceLogin === 0 ? 'today' : a.daysSinceLogin + ' days ago') + ')' : 'Has never logged in'),
+      el('div', { class: 'small muted' }, 'What they did in the last 30 days'),
+      a.recentActions.length ? el('ul', { style: 'margin:0;padding-left:18px' }, a.recentActions.map((x) => el('li', {}, fmtDate(x.at) + ': ' + x.action))) : el('p', { class: 'muted small', style: 'margin:0' }, 'Nothing recorded.')))) : el('p', { class: 'muted' }, 'No administrators on record (the Control Panel view v_client_admins has nothing for this client).');
+    // 2. employees
+    const e = r.employees; const head = e.lines.filter((l) => ['SIGN_IN', 'LEAVE_REQUEST', 'LOAN_REQUEST', 'PROFILE_UPDATE'].includes(l.eventType));
+    const have = new Set(head.map((l) => l.eventType));
+    const tiles = ['SIGN_IN', 'LEAVE_REQUEST', 'LOAN_REQUEST', 'PROFILE_UPDATE'].map((t) => { const l = head.find((x) => x.eventType === t); return tile(({ SIGN_IN: 'Sign-ins', LEAVE_REQUEST: 'Leave requests', LOAN_REQUEST: 'Loan requests', PROFILE_UPDATE: 'Profile updates' })[t], l ? l.last30.toLocaleString('en-NG') : '0', l && l.changePct != null ? chg(l.changePct) + ' on the 30 days before' : (have.has(t) ? '' : 'No activity recorded')); });
+    const maxW = Math.max(1, ...e.weekly.map((w) => Object.values(w.counts).reduce((a, b) => a + b, 0)));
+    const chart = e.weekly.length ? el('div', {}, el('div', { class: 'small muted' }, 'Employee activity per week (sign-ins, leave, loans and profile updates)'), el('div', { style: 'display:flex;gap:6px;align-items:flex-end;height:84px;margin-top:6px' }, e.weekly.map((w) => { const t = Object.values(w.counts).reduce((a, b) => a + b, 0); return el('div', { style: 'flex:1;display:grid;gap:2px;justify-items:center', title: fmtDate(w.from) + ' to ' + fmtDate(w.to) + ': ' + t }, el('div', { class: 'small muted' }, String(t)), el('div', { style: 'width:100%;border-radius:3px 3px 0 0;background:var(--blue);height:' + Math.max(2, Math.round((t * 56) / maxW)) + 'px' })); })), el('div', { style: 'display:flex;gap:6px' }, e.weekly.map((w) => el('div', { class: 'small muted', style: 'flex:1;text-align:center;font-size:11px' }, fmtDate(w.from))))) : null;
+    const others = e.lines.filter((l) => !['SIGN_IN', 'LEAVE_REQUEST', 'LOAN_REQUEST', 'PROFILE_UPDATE'].includes(l.eventType));
+    // 3. support
+    const sp = r.support; const ss = sp.summary;
+    const support = [el('div', { class: 'grid2' }, tile('Open tickets', String(ss.open), ''), tile('Past SLA', String(ss.breached), 'Step in on these', ss.breached ? 'urgent' : null), tile('At risk of breaching', String(ss.atRisk), ''), tile('Average first reply', ss.avgFirstResponseHours == null ? '–' : ss.avgFirstResponseHours + 'h', ss.resolvedWithinSlaPct == null ? '' : ss.resolvedWithinSlaPct + '% of closed tickets resolved within target')),
+      el('p', { class: 'small muted', style: 'margin:0' }, 'Targets: first reply ' + sp.targets.firstResponseHigh + 'h for high or urgent tickets, ' + sp.targets.firstResponseNormal + 'h for the rest. Resolution ' + sp.targets.resolutionHigh + 'h and ' + sp.targets.resolutionNormal + 'h. Counted in elapsed hours, including weekends.'),
+      sp.tickets.length ? el('div', { class: 'card table-wrap' }, el('table', { style: 'min-width:820px' }, el('thead', {}, el('tr', {}, ['Ticket', 'Status', 'Raised by', 'Priority', 'Age', 'First reply', 'Resolution'].map((h) => el('th', {}, h)))), el('tbody', {}, sp.tickets.map((t) => el('tr', { style: 'cursor:default' },
+        el('td', {}, el('strong', {}, t.subject), t.reopenCount ? el('div', { class: 'small', style: 'color:var(--high)' }, 'Reopened ' + t.reopenCount + 'x') : null), el('td', {}, el('span', { class: 'chip ' + (t.open ? 'low' : 'ok') }, t.status)),
+        el('td', { class: 'small' }, t.raisedBy || '–'), el('td', { class: 'small' }, t.priority ? t.priority.toLowerCase() : '–'), el('td', { class: 'small' }, t.ageHours >= 48 ? Math.round(t.ageHours / 24) + ' days' : t.ageHours + 'h'),
+        el('td', {}, slaChip(t.sla.firstResponse)), el('td', {}, slaChip(t.sla.resolution))))))) : el('p', { class: 'muted' }, 'No tickets in the last 90 days.')];
+    // 4. modules
+    const inUse = r.modules.filter((m) => m.status === 'in_use'); const unused = r.modules.filter((m) => m.status === 'unused');
+    const modules = el('div', { class: 'grid2' },
+      el('div', { class: 'card detail' }, el('strong', {}, 'In use (' + inUse.length + ')'), inUse.length ? el('ul', { style: 'margin:0;padding-left:18px' }, inUse.map((m) => el('li', {}, el('b', {}, m.label), el('span', { class: 'small muted' }, ' · ' + (m.events30 ? m.events30.toLocaleString('en-NG') + ' actions in 30 days' : 'active') + (m.lastActive ? ', last ' + fmtDate(m.lastActive) : '')))) ) : el('p', { class: 'muted small', style: 'margin:0' }, 'Nothing in use.')),
+      el('div', { class: 'card detail' }, el('strong', {}, 'Bought but not used (' + unused.length + ')'), unused.length ? el('ul', { style: 'margin:0;padding-left:18px' }, unused.map((m) => el('li', {}, el('b', {}, m.label), el('span', { class: 'small muted' }, m.lastActive ? ' · last used ' + fmtDate(m.lastActive) : ' · never used')))) : el('p', { class: 'muted small', style: 'margin:0' }, 'Everything bought is being used.'), unused.length ? el('p', { class: 'small', style: 'margin:0;color:var(--high)' }, 'Bought but idle is a churn risk. Book a training call.') : null),
+      el('div', { class: 'card detail', style: 'grid-column:1/-1' }, el('strong', {}, 'Possible upsell'), r.upsell.length ? el('div', { style: 'display:grid;gap:8px' }, r.upsell.filter((u) => u.reasons.length).slice(0, 5).map((u) => el('div', {}, el('b', {}, u.label), u.ready ? el('span', { class: 'chip ok', style: 'margin-left:6px' }, 'ready') : el('span', { class: 'chip high', style: 'margin-left:6px' }, 'hold: ' + u.holdReason), el('div', { class: 'small muted' }, u.reasons.join('. ') + '.')))) : el('p', { class: 'muted small', style: 'margin:0' }, r.modules.some((m) => m.status !== 'not_purchased') ? 'They already have every module.' : 'Modules bought are not available for this client.')));
+    box.replaceChildren(
+      el('div', { class: 'bar' }, el('strong', { style: 'color:var(--navy);font-size:20px;margin-right:auto' }, r.client.name), el('span', { class: 'small muted' }, 'CSM: ' + (r.client.csmName || r.client.csmEmail || 'Unassigned')), el('button', { class: 'btn', onclick: () => (box.hidden = true) }, 'Close')),
+      sec('1. Administrators', admins),
+      sec('2. Employee activity, last 30 days', el('div', { class: 'grid2' }, tiles), e.dailyActive != null ? el('p', { class: 'small muted', style: 'margin:0' }, 'About ' + e.dailyActive + ' employees sign in on a typical day' + (e.activeSeats ? ' (' + Math.min(100, Math.round(e.dailyActive * 100 / e.activeSeats)) + '% of ' + e.activeSeats + ' active seats).' : '.')) : null, chart, others.length ? el('p', { class: 'small', style: 'margin:0' }, 'Other activity: ' + others.map((l) => l.label.toLowerCase() + ' ' + l.last30.toLocaleString('en-NG') + (l.changePct != null ? ' (' + chg(l.changePct) + ')' : '')).join(', ') + '.') : null),
+      sec('3. Support tickets and SLA', ...support),
+      sec('4. Modules: in use, idle and open for upsell', modules));
+  } catch (err) { box.replaceChildren(el('p', { class: 'muted' }, err.message)); }
 }
 `;

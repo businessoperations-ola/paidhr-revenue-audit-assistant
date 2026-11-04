@@ -199,6 +199,9 @@ export interface SupportTicket {
   reopenCount: number;
   /** -2 (very negative) to 2 (very positive); null until scored by Claude. */
   sentiment: number | null;
+  priority?: string | null;
+  firstResponseAt?: string | null;
+  closedAt?: string | null;
 }
 
 export interface SupportRules {

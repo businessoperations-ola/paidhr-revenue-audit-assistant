@@ -21,6 +21,11 @@ const RulesSchema = z.object({
   radar_contractor_min: z.coerce.number().int().min(1).max(10000),
   support_reopen_threshold: z.coerce.number().int().min(1).max(20),
   support_open_days: z.coerce.number().int().min(1).max(90),
+  sla_first_response_high_hours: z.coerce.number().int().min(1).max(720),
+  sla_first_response_normal_hours: z.coerce.number().int().min(1).max(720),
+  sla_resolution_high_hours: z.coerce.number().int().min(1).max(2160),
+  sla_resolution_normal_hours: z.coerce.number().int().min(1).max(2160),
+  sla_at_risk_pct: z.coerce.number().int().min(10).max(99),
 });
 
 export type AuditRules = z.infer<typeof RulesSchema>;

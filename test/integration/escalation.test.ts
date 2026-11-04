@@ -28,6 +28,8 @@ describe('escalation against Postgres', () => {
     await db.query(`INSERT INTO csm_team (csm_email, team_lead_email) VALUES ('tunde.bello@example.com', 'lead@example.com')`);
 
     await jobs.run('daily', '2026-11-03');
+    // These scenarios are about billing and engagement alerts, so support SLA alerts start out handled.
+    await db.query(`UPDATE audit_flag SET acknowledged_at = now(), acknowledged_by = 'test' WHERE type = 'SUPPORT_SLA_BREACH'`);
     // Pin the clock: every alert went out at 05:00 WAT on Tuesday 3 Nov.
     await db.query(`UPDATE audit_flag SET notified_at = '2026-11-03T05:00:00+01:00' WHERE notified_at IS NOT NULL`);
     outbox.emails = [];

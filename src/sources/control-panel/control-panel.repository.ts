@@ -1,7 +1,8 @@
 import pg from 'pg';
 import type { AppConfig } from '../../config/config.js';
 import type { IsoDate } from '../../common/calendar.js';
-import type { ControlPanelAccount, PayFrequency, RevenueCategory, RevenueLine } from '../../domain/types.js';
+import { redactText } from '../../common/redact.js';
+import type { AdminAction, ClientAdmin, ClientModule, ControlPanelAccount, EmployeeActivity, PayFrequency, RevenueCategory, RevenueLine } from '../../domain/types.js';
 import type { ControlPanelSource } from '../source.types.js';
 
 const FREQUENCIES: ReadonlySet<string> = new Set(['MONTHLY', 'SEMI_MONTHLY', 'BIWEEKLY', 'WEEKLY']);
@@ -120,6 +121,40 @@ export class ControlPanelRepository implements ControlPanelSource {
   async fetchAdminEmails(): Promise<string[]> {
     const { rows } = await this.pool.query<{ email: string }>(`SELECT lower(email) AS email FROM ${this.schema}.v_admin_users`);
     return rows.map((r) => r.email);
+  }
+
+  async fetchClientAdmins(): Promise<ClientAdmin[]> {
+    const { rows } = await this.pool.query<{ client_id: string | number; email: string; name: string | null; admin_level: string; last_login_at: Date | string | null }>(
+      `SELECT client_id, lower(email) AS email, name, upper(admin_level) AS admin_level, last_login_at FROM ${this.schema}.v_client_admins`,
+    );
+    return rows.map((r) => ({
+      clientId: String(r.client_id), email: r.email, name: r.name, level: r.admin_level === 'PRIMARY' ? 'PRIMARY' : 'SECONDARY',
+      lastLoginAt: r.last_login_at ? new Date(r.last_login_at).toISOString() : null,
+    }));
+  }
+
+  async fetchAdminActions(since: IsoDate): Promise<AdminAction[]> {
+    const { rows } = await this.pool.query<{ client_id: string | number; email: string; action_at: Date | string; action: string }>(
+      `SELECT client_id, lower(email) AS email, action_at, action FROM ${this.schema}.v_client_admin_actions WHERE action_at >= $1 ORDER BY action_at DESC LIMIT 200000`,
+      [since],
+    );
+    return rows.map((r) => ({ clientId: String(r.client_id), email: r.email, at: new Date(r.action_at).toISOString(), action: redactText(r.action, 160) }));
+  }
+
+  async fetchEmployeeActivity(since: IsoDate): Promise<EmployeeActivity[]> {
+    const { rows } = await this.pool.query<{ client_id: string | number; activity_date: string | Date; module: string; event_type: string; events: string | number; active_employees: string | number }>(
+      `SELECT client_id, activity_date, upper(module) AS module, upper(event_type) AS event_type, events, active_employees
+         FROM ${this.schema}.v_employee_activity_daily WHERE activity_date >= $1`,
+      [since],
+    );
+    return rows.map((r) => ({ clientId: String(r.client_id), date: isoDate(r.activity_date)!, module: r.module, eventType: r.event_type, events: Number(r.events), activeEmployees: Number(r.active_employees) }));
+  }
+
+  async fetchClientModules(): Promise<ClientModule[]> {
+    const { rows } = await this.pool.query<{ client_id: string | number; module: string; purchased_on: string | Date | null }>(
+      `SELECT client_id, upper(module) AS module, purchased_on FROM ${this.schema}.v_client_modules`,
+    );
+    return rows.map((r) => ({ clientId: String(r.client_id), module: r.module, purchasedOn: isoDate(r.purchased_on ?? null) }));
   }
 
   async close(): Promise<void> {

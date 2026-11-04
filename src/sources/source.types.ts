@@ -1,5 +1,5 @@
 import type { IsoDate } from '../common/calendar.js';
-import type { ControlPanelAccount, HubSpotCompany, RevenueLine, Severity, Ticket } from '../domain/types.js';
+import type { AdminAction, ClientAdmin, ClientModule, ControlPanelAccount, EmployeeActivity, HubSpotCompany, RevenueLine, Severity, Ticket } from '../domain/types.js';
 
 export interface HubSpotTaskInput {
   companyId: string;
@@ -27,6 +27,14 @@ export interface ControlPanelSource {
   fetchRevenueLines(since: IsoDate): Promise<RevenueLine[]>;
   /** Emails of Control Panel admins, for the broadcast permission check (US-20). */
   fetchAdminEmails(): Promise<string[]>;
+  /** Each customer's primary and secondary administrators, with their last login. */
+  fetchClientAdmins(): Promise<ClientAdmin[]>;
+  /** What administrators did since a date. */
+  fetchAdminActions(since: IsoDate): Promise<AdminAction[]>;
+  /** Daily employee activity by module and event since a date. */
+  fetchEmployeeActivity(since: IsoDate): Promise<EmployeeActivity[]>;
+  /** Which modules each customer has bought. */
+  fetchClientModules(): Promise<ClientModule[]>;
 }
 
 export const HUBSPOT_SOURCE = Symbol('HUBSPOT_SOURCE');

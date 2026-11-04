@@ -25,6 +25,14 @@ describe('Control Panel view contract', () => {
       CREATE TABLE statutory_remittances (company_id text, generated_at timestamptz);
       CREATE TABLE invoices (company_id text, invoice_date date, product text, amount numeric, is_expansion boolean);
       CREATE TABLE users (email text, is_admin boolean, is_active boolean);
+      CREATE TABLE company_admins (company_id text, email text, full_name text, is_primary boolean, is_active boolean, last_login_at timestamptz);
+      CREATE TABLE admin_audit_log (company_id text, admin_email text, occurred_at timestamptz, description text);
+      CREATE TABLE employee_events (company_id text, employee_id text, occurred_at timestamptz, module text, event_type text);
+      CREATE TABLE company_subscriptions (company_id text, module text, purchased_at timestamptz, is_active boolean);
+      INSERT INTO company_admins VALUES ('P', 'Boss@Example.com', 'Boss', true, true, '2026-11-01T09:00:00Z'), ('P', 'deputy@example.com', 'Deputy', false, true, NULL), ('P', 'gone@example.com', 'Gone', false, false, NULL);
+      INSERT INTO admin_audit_log VALUES ('P', 'boss@example.com', '2026-11-01T09:05:00Z', 'Approved leave for jane@example.com 08031234567'), ('P', 'boss@example.com', '2026-01-01T09:05:00Z', 'Old');
+      INSERT INTO employee_events VALUES ('P', 'e1', '2026-11-01T08:00:00Z', 'PLATFORM', 'SIGN_IN'), ('P', 'e2', '2026-11-01T08:30:00Z', 'PLATFORM', 'SIGN_IN'), ('P', 'e1', '2026-11-01T09:00:00Z', 'LEAVE', 'LEAVE_REQUEST');
+      INSERT INTO company_subscriptions VALUES ('P', 'payroll', '2025-01-01', true), ('P', 'loans', '2025-02-01', false);
       INSERT INTO ewa_requests VALUES ('P', now() - interval '2 days', 500000), ('P', now() - interval '60 days', 900000);
       INSERT INTO statutory_remittances VALUES ('P', '2026-10-20T00:00:00Z');
       INSERT INTO invoices VALUES ('P', '2026-10-10', 'ewa', 1500, true), ('P', '2026-10-11', 'seat_upgrade', 100, false), ('C', '2026-10-12', 'training', 20, true);
@@ -57,6 +65,18 @@ describe('Control Panel view contract', () => {
     expect(p).toMatchObject({ createdOn: '2026-10-01', payrollConfiguredOn: '2026-10-03', firstPayrollRunOn: '2026-09-25', ewaVolume30dKobo: 500000n, statutoryLastUsedOn: '2026-10-20' });
     expect(p.ewaLastUsedOn).not.toBeNull();
     expect(accounts.find((a) => a.clientId === 'C')!.firstPayrollRunOn).toBeNull();
+  });
+
+  it('reads administrators, what they did, employee activity and modules bought', async () => {
+    const admins = await repo.fetchClientAdmins();
+    expect(admins.map((a) => [a.email, a.level, a.lastLoginAt])).toEqual(expect.arrayContaining([['boss@example.com', 'PRIMARY', '2026-11-01T09:00:00.000Z'], ['deputy@example.com', 'SECONDARY', null]]));
+    expect(admins).toHaveLength(2); // the inactive admin is left out
+    const actions = await repo.fetchAdminActions('2026-10-01');
+    expect(actions).toHaveLength(1);
+    expect(actions[0]!.action).toBe('Approved leave for [email] [number]'); // personal details removed
+    const activity = await repo.fetchEmployeeActivity('2026-10-01');
+    expect(activity.find((a) => a.eventType === 'SIGN_IN')).toMatchObject({ clientId: 'P', module: 'PLATFORM', events: 2, activeEmployees: 2, date: '2026-11-01' });
+    expect(await repo.fetchClientModules()).toEqual([{ clientId: 'P', module: 'PAYROLL', purchasedOn: '2025-01-01' }]);
   });
 
   it('reads revenue lines and admin emails from their views', async () => {

@@ -7,8 +7,8 @@ import { ApiModule, WorkerModule } from '../../src/app.module.js';
 import type { AiRationale, StoredFlag } from '../../src/audits/flag.repository.js';
 import { IDENTITY_VERIFIER } from '../../src/auth/auth.js';
 import { loadConfig, type AppConfig } from '../../src/config/config.js';
-import type { ControlPanelAccount, HubSpotCompany, RevenueLine, Ticket } from '../../src/domain/types.js';
-import { FIXTURE_ACCOUNTS, FIXTURE_COMPANIES, FIXTURE_REVENUE, FIXTURE_TICKETS } from '../../src/sources/fixtures/fixture.sources.js';
+import type { ClientModule, ControlPanelAccount, HubSpotCompany, RevenueLine, Ticket } from '../../src/domain/types.js';
+import { FIXTURE_ACCOUNTS, FIXTURE_COMPANIES, FIXTURE_MODULES, FIXTURE_REVENUE, FIXTURE_TICKETS, fixtureAdminActions, fixtureAdmins, fixtureEmployeeActivity } from '../../src/sources/fixtures/fixture.sources.js';
 import { CONTROL_PANEL_SOURCE, HUBSPOT_SOURCE, type HubSpotTaskInput } from '../../src/sources/source.types.js';
 
 export const TEST_DB = process.env.TEST_DATABASE_URL ?? 'postgresql://audit:audit@localhost:5432/audit_test';
@@ -28,6 +28,9 @@ export class World {
   tickets: Ticket[] = structuredClone(FIXTURE_TICKETS);
   revenue: RevenueLine[] = structuredClone(FIXTURE_REVENUE);
   adminEmails: string[] = ['admin@example.com', 'director@example.com'];
+  modules: ClientModule[] = structuredClone(FIXTURE_MODULES);
+  /** Anchor for the generated adoption data; tests that need a fixed day can change it. */
+  now = new Date();
   /** Notes written to the HubSpot activity feed. */
   notes: Array<{ companyId: string; body: string; at: Date }> = [];
   ticket(id: string) {
@@ -195,6 +198,10 @@ function overrides(builder: ReturnType<typeof Test.createTestingModule>, world: 
       fetchAccounts: async () => structuredClone(world.accounts),
       fetchRevenueLines: async () => structuredClone(world.revenue),
       fetchAdminEmails: async () => world.adminEmails,
+      fetchClientAdmins: async () => fixtureAdmins(world.now),
+      fetchAdminActions: async () => fixtureAdminActions(world.now),
+      fetchEmployeeActivity: async (since: string) => fixtureEmployeeActivity(world.now, since),
+      fetchClientModules: async () => structuredClone(world.modules),
     })
     .overrideProvider(ALERT_SENDERS)
     .useValue(outbox)

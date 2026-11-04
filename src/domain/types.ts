@@ -74,6 +74,12 @@ export interface Ticket {
   createdAt: string;
   closedAt: string | null;
   isClosed: boolean;
+  /** The ticket's pipeline stage, as a readable label ("Waiting on customer"). */
+  statusLabel?: string | null;
+  /** When support first replied. Null until they have. */
+  firstResponseAt?: string | null;
+  /** Who raised it at the customer, when HubSpot says (first name and initial only). */
+  raisedBy?: string | null;
 }
 
 export type FlagType =
@@ -88,7 +94,8 @@ export type FlagType =
   | 'LATE_PAYROLL' // US-24
   | 'ENGAGEMENT_DROUGHT' // US-14
   | 'ONBOARDING_STAGNATION' // US-26
-  | 'SUPPORT_ESCALATION_RISK'; // CSAT & escalation early warning
+  | 'SUPPORT_ESCALATION_RISK' // CSAT & escalation early warning
+  | 'SUPPORT_SLA_BREACH'; // tickets past their first-response or resolution target
 
 export type Severity = 'urgent' | 'high' | 'medium' | 'low';
 
@@ -115,4 +122,43 @@ export interface CompanyDayPoint {
   /** Active users in Control Panel, rolled up across sub-accounts. */
   seats: number | null;
   contractEndDate: IsoDate | null;
+}
+
+export type AdminLevel = 'PRIMARY' | 'SECONDARY';
+
+/** A customer's administrator in the Control Panel. */
+export interface ClientAdmin {
+  clientId: string;
+  email: string;
+  name: string | null;
+  level: AdminLevel;
+  lastLoginAt: string | null;
+}
+
+/** Something an administrator did on the platform. */
+export interface AdminAction {
+  clientId: string;
+  email: string;
+  at: string;
+  action: string;
+}
+
+/** One day of employee activity for a customer: how many times, and by how many people. */
+export interface EmployeeActivity {
+  clientId: string;
+  date: IsoDate;
+  /** Product module the activity belongs to, e.g. LEAVE, LOANS, CORE_HR, PLATFORM. */
+  module: string;
+  /** What happened, e.g. SIGN_IN, LEAVE_REQUEST, LOAN_REQUEST, PROFILE_UPDATE. */
+  eventType: string;
+  events: number;
+  /** Distinct employees who did this that day. */
+  activeEmployees: number;
+}
+
+/** A module a customer has bought. */
+export interface ClientModule {
+  clientId: string;
+  module: string;
+  purchasedOn: IsoDate | null;
 }

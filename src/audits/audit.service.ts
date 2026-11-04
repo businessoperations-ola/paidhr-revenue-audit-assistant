@@ -5,6 +5,7 @@ import { Database } from '../db/database.js';
 import type { ControlPanelAccount, FlagType, Finding, HubSpotCompany } from '../domain/types.js';
 import { SnapshotRepository } from '../ingestion/snapshot.repository.js';
 import { auditOnboarding, auditSupportRisk, type SupportTicket } from '../cx/cx-rules.js';
+import { auditSlaBreach, slaRulesFrom } from '../adoption/sla.js';
 import { auditArrMath } from './arr-math.audit.js';
 import { auditEngagement } from './engagement.audit.js';
 import { FlagRepository } from './flag.repository.js';
@@ -30,6 +31,7 @@ export const PHASE1_FLAG_TYPES: FlagType[] = [
   'ENGAGEMENT_DROUGHT',
   'ONBOARDING_STAGNATION',
   'SUPPORT_ESCALATION_RISK',
+  'SUPPORT_SLA_BREACH',
 ];
 
 export interface AuditRunResult {
@@ -110,6 +112,8 @@ export function runAllAudits(input: {
       openDays: rules.support_open_days,
     }),
   );
+  // Measured at 04:00 Lagos on the run date, when the daily job runs.
+  findings.push(...auditSlaBreach(input.tickets ?? [], companies, new Date(`${input.today}T03:00:00Z`), slaRulesFrom(rules)));
 
   return { findings, reconciliation: reconciliation.summary, rollups };
 }

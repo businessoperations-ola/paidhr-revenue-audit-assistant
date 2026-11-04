@@ -14,6 +14,7 @@ export const FLAG_TITLES: Record<FlagType, string> = {
   ENGAGEMENT_DROUGHT: 'No contact within the limit',
   ONBOARDING_STAGNATION: 'Onboarding stalled: payroll not set up',
   SUPPORT_ESCALATION_RISK: 'Support issue at risk of escalating',
+  SUPPORT_SLA_BREACH: 'Support tickets past their SLA',
 };
 
 export type AckUrlFn = (flagId: number) => string;

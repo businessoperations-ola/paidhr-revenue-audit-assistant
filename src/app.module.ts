@@ -25,11 +25,13 @@ import {
   ReportsController,
   RulesController,
 } from './api/controllers.js';
+import { AdoptionRepository } from './adoption/adoption.repository.js';
+import { AdoptionService } from './adoption/adoption.service.js';
 import { OrgService } from './org/org.service.js';
 import { PortfolioService } from './portfolio/portfolio.service.js';
 import { UsersController } from './api/users.controller.js';
 import { MeController, TeamController, WebAppController } from './api/admin.controllers.js';
-import { AnalyticsController, BroadcastController, CxController, PortfolioController, ReportScheduleController } from './api/phase34.controllers.js';
+import { AdoptionController, AnalyticsController, BroadcastController, CxController, PortfolioController, ReportScheduleController } from './api/phase34.controllers.js';
 import { BigIntInterceptor, DomainErrorFilter } from './api/http.js';
 import { AuditService } from './audits/audit.service.js';
 import { FlagRepository } from './audits/flag.repository.js';
@@ -66,6 +68,8 @@ export function coreProviders(cfg: AppConfig): Provider[] {
     AnalyticsService,
     CxService,
     OrgService,
+    AdoptionRepository,
+    AdoptionService,
     PortfolioService,
     ReportBuilder,
     ReportService,
@@ -135,6 +139,7 @@ export class ApiModule {
         ReportScheduleController,
         CxController,
         PortfolioController,
+        AdoptionController,
         BroadcastController,
       ],
       providers: [
