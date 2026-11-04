@@ -27,7 +27,7 @@ type Req = { user: AuthUser };
 export class MeController {
   @Get()
   me(@Req() req: Req) {
-    return req.user;
+    return { ...req.user, isAdmin: req.user.role === 'super_admin' || req.user.role === 'cs_director' };
   }
 }
 

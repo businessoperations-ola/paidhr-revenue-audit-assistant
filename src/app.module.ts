@@ -25,6 +25,7 @@ import {
   ReportsController,
   RulesController,
 } from './api/controllers.js';
+import { UsersController } from './api/users.controller.js';
 import { MeController, TeamController, WebAppController } from './api/admin.controllers.js';
 import { AnalyticsController, BroadcastController, CxController, ReportScheduleController } from './api/phase34.controllers.js';
 import { BigIntInterceptor, DomainErrorFilter } from './api/http.js';
@@ -120,6 +121,7 @@ export class ApiModule {
         HealthController,
         AckController,
         MeController,
+        UsersController,
         FlagsController,
         ReportsController,
         RulesController,

@@ -174,7 +174,7 @@ export class ReportService {
   }
 
   private async recipients(audience: Audience): Promise<string[]> {
-    const { rows } = await this.db.query<{ email: string }>('SELECT email FROM app_user WHERE role = ANY($1) ORDER BY email', [RECIPIENT_ROLES[audience]]);
+    const { rows } = await this.db.query<{ email: string }>('SELECT email FROM app_user WHERE active AND role = ANY($1) ORDER BY email', [RECIPIENT_ROLES[audience]]);
     return rows.map((r) => r.email);
   }
 }

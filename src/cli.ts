@@ -44,7 +44,7 @@ async function main() {
       const [email, role] = rest;
       if (!email || !role) throw new Error('grant <email> <role>');
       await db.query(
-        `INSERT INTO app_user (email, role) VALUES (lower($1), $2) ON CONFLICT (email) DO UPDATE SET role = EXCLUDED.role`,
+        `INSERT INTO app_user (email, role) VALUES (lower($1), $2) ON CONFLICT (email) DO UPDATE SET role = EXCLUDED.role, active = true`,
         [email, role],
       );
       await db.query(

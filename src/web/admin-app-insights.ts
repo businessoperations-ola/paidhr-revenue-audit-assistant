@@ -38,6 +38,18 @@ export const INSIGHTS_HTML = /* html */ `
     <div id="sp-body" class="grid2"></div>
   </section>
 
+  <section id="view-users" hidden>
+    <h2>Users</h2>
+    <p class="muted small">Everyone who can sign in. People sign in with their Google Workspace account; the role decides what they see. Deactivating stops sign-in and all notifications but keeps the history.</p>
+    <form class="bar card" id="us-form" style="padding:12px;margin:12px 0">
+      <input id="us-email" type="email" placeholder="name@paidhr.com" required aria-label="Email">
+      <input id="us-name" placeholder="Name (optional)" maxlength="120" aria-label="Name">
+      <select id="us-role" aria-label="Role"></select>
+      <button class="btn primary" type="submit">Add user</button>
+    </form>
+    <div class="card table-wrap"><table><thead><tr><th>User</th><th>Role</th><th>Status</th><th>Last seen</th><th></th></tr></thead><tbody id="us-rows"></tbody></table></div>
+  </section>
+
   <section id="view-broadcasts" hidden>
     <h2>Broadcasts</h2>
     <div class="notice" id="bc-locked" hidden></div>
@@ -74,11 +86,9 @@ export const INSIGHTS_HTML = /* html */ `
 `;
 
 export const INSIGHTS_JS = String.raw`
-const NAV_EXTRA = [['reports', 'Reports'], ['cx', 'Growth'], ['support', 'Support'], ['broadcasts', 'Broadcasts']];
-const ALL_VIEWS = ['alerts', 'rules', 'teams', 'recon', 'reports', 'cx', 'support', 'broadcasts'];
+const ALL_VIEWS = ['alerts', 'rules', 'teams', 'recon', 'reports', 'cx', 'support', 'broadcasts', 'users'];
 const AUDIENCE_LABELS = { executive: 'Leadership', csm: 'CSM portfolio', implementation: 'Implementation', support: 'Support' };
 const ROLE_AUDIENCES = { csm: ['csm'], implementation_manager: ['implementation'], support_specialist: ['support'] };
-for (const [v, label] of NAV_EXTRA) $('nav').append(el('button', { 'data-view': v }, label));
 const money = (kobo) => '₦' + (Number(BigInt(kobo) / 100n)).toLocaleString('en-NG');
 const isMgr = () => ['super_admin', 'cs_director'].includes(state.me.role);
 
@@ -262,5 +272,33 @@ async function bcWatch(runId) {
     await new Promise((res) => setTimeout(res, 1500));
   }
   loadBroadcasts();
+}
+
+/* ---------- Users ---------- */
+const ROLE_NAMES = { super_admin: 'Super admin', cs_director: 'CS Director', cs_team_lead: 'CS Team Lead', csm: 'CSM', implementation_manager: 'Implementation Manager', support_specialist: 'Support Specialist', viewer: 'Viewer' };
+const roleOptions = () => Object.entries(ROLE_NAMES).filter(([k]) => k !== 'super_admin' || state.me.role === 'super_admin');
+async function loadUsers() {
+  if (!$('us-form').dataset.wired) {
+    $('us-form').dataset.wired = '1';
+    $('us-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      try { await api('/users', { method: 'POST', body: JSON.stringify({ email: $('us-email').value.trim(), name: $('us-name').value.trim() || undefined, role: $('us-role').value }) }); notice('User added. They can now sign in with Google.'); $('us-form').reset(); loadUsers(); }
+      catch (err) { if (err.message !== 'unauthorized') notice(err.message, true); }
+    });
+  }
+  $('us-role').replaceChildren(...roleOptions().map(([k, v]) => el('option', { value: k, selected: k === 'csm' }, v)));
+  const rows = await api('/users');
+  const rel = (iso) => iso ? new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Africa/Lagos' }) : 'Never';
+  const change = async (u, patch, ok) => { try { await api('/users/' + encodeURIComponent(u.email), { method: 'PUT', body: JSON.stringify(patch) }); notice(ok); loadUsers(); } catch (err) { if (err.message !== 'unauthorized') notice(err.message, true); loadUsers(); } };
+  $('us-rows').replaceChildren(...rows.map((u) => {
+    const self = u.email === state.me.email;
+    const locked = u.role === 'super_admin' && state.me.role !== 'super_admin';
+    const sel = el('select', { 'aria-label': 'Role for ' + u.email, disabled: self || locked, onchange: (e) => change(u, { role: e.target.value }, 'Role updated') }, Object.entries(ROLE_NAMES).filter(([k]) => k !== 'super_admin' || state.me.role === 'super_admin' || u.role === 'super_admin').map(([k, v]) => el('option', { value: k, selected: k === u.role }, v)));
+    return el('tr', { style: 'cursor:default' },
+      el('td', {}, el('strong', {}, u.name || u.email), u.name ? el('div', { class: 'small muted' }, u.email) : null, self ? el('span', { class: 'small muted' }, ' (you)') : null),
+      el('td', {}, sel), el('td', {}, el('span', { class: 'chip ' + (u.active ? 'ok' : 'low') }, u.active ? 'active' : 'deactivated')),
+      el('td', { class: 'small muted' }, rel(u.lastSeenAt)),
+      el('td', {}, self || locked ? null : el('button', { class: 'btn', onclick: () => change(u, { active: !u.active }, u.active ? 'User deactivated' : 'User restored') }, u.active ? 'Deactivate' : 'Restore')));
+  }));
 }
 `;
