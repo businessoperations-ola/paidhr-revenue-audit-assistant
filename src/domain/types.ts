@@ -165,4 +165,6 @@ export interface ClientModule {
   clientId: string;
   module: string;
   purchasedOn: IsoDate | null;
+  /** When it was set up. Null = not set up yet. Undefined = the Control Panel does not say. */
+  configuredOn?: IsoDate | null;
 }

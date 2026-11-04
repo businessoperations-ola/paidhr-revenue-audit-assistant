@@ -28,11 +28,11 @@ describe('Control Panel view contract', () => {
       CREATE TABLE company_admins (company_id text, email text, full_name text, is_primary boolean, is_active boolean, last_login_at timestamptz);
       CREATE TABLE admin_audit_log (company_id text, admin_email text, occurred_at timestamptz, description text);
       CREATE TABLE employee_events (company_id text, employee_id text, occurred_at timestamptz, module text, event_type text);
-      CREATE TABLE company_subscriptions (company_id text, module text, purchased_at timestamptz, is_active boolean);
+      CREATE TABLE company_subscriptions (company_id text, module text, purchased_at timestamptz, is_active boolean, configured_at timestamptz);
       INSERT INTO company_admins VALUES ('P', 'Boss@Example.com', 'Boss', true, true, '2026-11-01T09:00:00Z'), ('P', 'deputy@example.com', 'Deputy', false, true, NULL), ('P', 'gone@example.com', 'Gone', false, false, NULL);
       INSERT INTO admin_audit_log VALUES ('P', 'boss@example.com', '2026-11-01T09:05:00Z', 'Approved leave for jane@example.com 08031234567'), ('P', 'boss@example.com', '2026-01-01T09:05:00Z', 'Old');
       INSERT INTO employee_events VALUES ('P', 'e1', '2026-11-01T08:00:00Z', 'PLATFORM', 'SIGN_IN'), ('P', 'e2', '2026-11-01T08:30:00Z', 'PLATFORM', 'SIGN_IN'), ('P', 'e1', '2026-11-01T09:00:00Z', 'LEAVE', 'LEAVE_REQUEST');
-      INSERT INTO company_subscriptions VALUES ('P', 'payroll', '2025-01-01', true), ('P', 'loans', '2025-02-01', false);
+      INSERT INTO company_subscriptions VALUES ('P', 'payroll', '2025-01-01', true, '2025-01-05'), ('P', 'leave', '2025-02-01', true, NULL), ('P', 'loans', '2025-02-01', false, NULL);
       INSERT INTO ewa_requests VALUES ('P', now() - interval '2 days', 500000), ('P', now() - interval '60 days', 900000);
       INSERT INTO statutory_remittances VALUES ('P', '2026-10-20T00:00:00Z');
       INSERT INTO invoices VALUES ('P', '2026-10-10', 'ewa', 1500, true), ('P', '2026-10-11', 'seat_upgrade', 100, false), ('C', '2026-10-12', 'training', 20, true);
@@ -76,7 +76,21 @@ describe('Control Panel view contract', () => {
     expect(actions[0]!.action).toBe('Approved leave for [email] [number]'); // personal details removed
     const activity = await repo.fetchEmployeeActivity('2026-10-01');
     expect(activity.find((a) => a.eventType === 'SIGN_IN')).toMatchObject({ clientId: 'P', module: 'PLATFORM', events: 2, activeEmployees: 2, date: '2026-11-01' });
-    expect(await repo.fetchClientModules()).toEqual([{ clientId: 'P', module: 'PAYROLL', purchasedOn: '2025-01-01' }]);
+    const mods = await repo.fetchClientModules();
+    expect(mods).toEqual(expect.arrayContaining([{ clientId: 'P', module: 'PAYROLL', purchasedOn: '2025-01-01', configuredOn: '2025-01-05' }, { clientId: 'P', module: 'LEAVE', purchasedOn: '2025-02-01', configuredOn: null }]));
+    expect(mods).toHaveLength(2); // the inactive subscription is left out
+  });
+
+  it('still reads modules bought when the view has no configured_on column yet, and says it does not know', async () => {
+    const client = new pg.Client({ connectionString: TEST_CP_DB });
+    await client.connect();
+    await client.query(`CREATE SCHEMA IF NOT EXISTS audit_old; CREATE OR REPLACE VIEW audit_old.v_client_modules AS SELECT s.company_id AS client_id, s.module, s.purchased_at::date AS purchased_on FROM company_subscriptions s WHERE s.is_active`);
+    await client.end();
+    const old = new ControlPanelRepository(testConfig({ CONTROL_PANEL_DATABASE_URL: TEST_CP_DB, CONTROL_PANEL_SCHEMA: 'audit_old' }));
+    const mods = await old.fetchClientModules();
+    await old.close();
+    expect(mods).toHaveLength(2);
+    expect(mods.every((m) => m.configuredOn === undefined)).toBe(true);
   });
 
   it('reads revenue lines and admin emails from their views', async () => {

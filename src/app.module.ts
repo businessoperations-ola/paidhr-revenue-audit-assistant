@@ -27,6 +27,7 @@ import {
 } from './api/controllers.js';
 import { AdoptionRepository } from './adoption/adoption.repository.js';
 import { AdoptionCatalogService } from './adoption/catalog.service.js';
+import { AdoptionSettingsService } from './adoption/settings.service.js';
 import { AdoptionService } from './adoption/adoption.service.js';
 import { OrgService } from './org/org.service.js';
 import { PortfolioService } from './portfolio/portfolio.service.js';
@@ -71,6 +72,7 @@ export function coreProviders(cfg: AppConfig): Provider[] {
     OrgService,
     AdoptionRepository,
     AdoptionCatalogService,
+    AdoptionSettingsService,
     AdoptionService,
     PortfolioService,
     ReportBuilder,

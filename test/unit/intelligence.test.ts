@@ -17,7 +17,7 @@ const WINDOWS: SeasonWindow[] = [
   { module: 'PERFORMANCE', startMonth: 6, endMonth: 7, boost: 15, reason: 'Mid-year reviews' },
   { module: 'LOANS', startMonth: 12, endMonth: 2, boost: 10, reason: 'Festive season and new year' }, // wraps the year end
 ];
-const ctx = (over: Partial<UpsellContext> = {}): UpsellContext => ({ catalog: CATALOG, windows: [], peerPct: new Map(), today: new Date('2026-03-10T00:00:00Z'), launchDays: 180, lookaheadDays: 60, signalDays: 180, ...over });
+const ctx = (over: Partial<UpsellContext> = {}): UpsellContext => ({ catalog: CATALOG, windows: [], peerPct: new Map(), today: new Date('2026-03-10T00:00:00Z'), launchDays: 180, lookaheadDays: 60, ...over });
 const opps = (f: ClientFacts, c: UpsellContext = ctx()) => upsellOpportunities(f, S, c, churnRisk(f, S));
 const find = (list: ReturnType<typeof opps>, key: string) => list.find((o) => o.module === key)!;
 

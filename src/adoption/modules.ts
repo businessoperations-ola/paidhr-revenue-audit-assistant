@@ -24,6 +24,10 @@ export const EVENT_LABEL: Record<string, string> = {
   PAYSLIP_VIEW: 'Payslip views',
   CLOCK_IN: 'Clock-ins',
   EXPENSE_CLAIM: 'Expense claims',
+  REQUISITION_REQUEST: 'Requisition requests',
+  PAYSLIP_GENERATED: 'Payslips generated',
+  PAYROLL_RUN: 'Payroll runs',
+  PAY_SCHEDULE_CREATED: 'Pay schedules created',
 };
 export const eventLabel = (code: string): string => EVENT_LABEL[code] ?? code.toLowerCase().replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
 

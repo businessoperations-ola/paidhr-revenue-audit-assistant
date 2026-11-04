@@ -151,10 +151,16 @@ export class ControlPanelRepository implements ControlPanelSource {
   }
 
   async fetchClientModules(): Promise<ClientModule[]> {
-    const { rows } = await this.pool.query<{ client_id: string | number; module: string; purchased_on: string | Date | null }>(
-      `SELECT client_id, upper(module) AS module, purchased_on FROM ${this.schema}.v_client_modules`,
-    );
-    return rows.map((r) => ({ clientId: String(r.client_id), module: r.module, purchasedOn: isoDate(r.purchased_on ?? null) }));
+    type Row = { client_id: string | number; module: string; purchased_on: string | Date | null; configured_on?: string | Date | null };
+    try {
+      const { rows } = await this.pool.query<Row>(`SELECT client_id, upper(module) AS module, purchased_on, configured_on FROM ${this.schema}.v_client_modules`);
+      return rows.map((r) => ({ clientId: String(r.client_id), module: r.module, purchasedOn: isoDate(r.purchased_on ?? null), configuredOn: isoDate(r.configured_on ?? null) }));
+    } catch (err) {
+      // 42703: the view has no configured_on column yet. Everything else still works; "is it configured" is simply unknown.
+      if ((err as { code?: string }).code !== '42703') throw err;
+      const { rows } = await this.pool.query<Row>(`SELECT client_id, upper(module) AS module, purchased_on FROM ${this.schema}.v_client_modules`);
+      return rows.map((r) => ({ clientId: String(r.client_id), module: r.module, purchasedOn: isoDate(r.purchased_on ?? null) }));
+    }
   }
 
   async close(): Promise<void> {

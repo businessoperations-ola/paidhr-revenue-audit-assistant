@@ -59,6 +59,24 @@ export const INSIGHTS_HTML = /* html */ `
     <div class="card table-wrap"><table style="min-width:760px"><thead><tr><th>Client</th><th>Signal</th><th>When</th><th>Added by</th><th></th></tr></thead><tbody id="sg-rows"></tbody></table></div>
   </section>
 
+  <section id="view-adoptionsettings" hidden>
+    <h2>Adoption criteria and scoring</h2>
+    <p class="muted small">Decide what counts as a module being in use, and how adoption, churn and upsell are scored. Changes apply to every number in the app straight away. Use Try it to see who would change before you save.</p>
+    <div class="bar" style="margin:8px 0" id="as-jump"><a class="chip low" href="#as-usage-h" onclick="document.getElementById('as-usage-h').scrollIntoView({behavior:'smooth'});return false">What counts as in use</a><a class="chip low" href="#as-scoring-h" onclick="document.getElementById('as-scoring-h').scrollIntoView({behavior:'smooth'});return false">Scoring</a><a class="chip low" href="#as-rel-h" onclick="document.getElementById('as-rel-h').scrollIntoView({behavior:'smooth'});return false">Holds, related modules and growth plans</a></div>
+    <h3 id="as-usage-h" style="margin:20px 0 4px;font-size:18px">What counts as a module being in use</h3>
+    <p class="muted small">Each module has a rule: a list of criteria, and whether any one or all of them must be met. A criterion we have no data for is left out, not held against the client.</p>
+    <div id="as-usage" style="display:grid;gap:12px"></div>
+    <h3 id="as-scoring-h" style="margin:28px 0 4px;font-size:18px">Scoring weights and thresholds</h3>
+    <p class="muted small" id="as-scoring-note"></p>
+    <div id="as-scoring" style="display:grid;gap:12px"></div>
+    <div class="bar" style="margin-top:10px"><button class="btn primary" id="as-save">Save scoring</button><button class="btn" id="as-reset">Reset all scoring to defaults</button></div>
+    <h3 id="as-rel-h" style="margin:28px 0 4px;font-size:18px">Holds, related modules and growth plans</h3>
+    <div id="as-holds" class="card detail"></div>
+    <div id="as-related" class="card detail" style="margin-top:12px"></div>
+    <div id="as-affinity" class="card detail" style="margin-top:12px"></div>
+    <div class="bar" style="margin-top:10px"><button class="btn primary" id="as-save2">Save holds, related modules and growth plans</button></div>
+  </section>
+
   <section id="view-catalog" hidden>
     <h2>Modules and seasons</h2>
     <p class="muted small">The modules that can be sold, when each launched, and the times of year each is most likely to be bought. These drive the upsell scores.</p>
@@ -171,7 +189,7 @@ export const INSIGHTS_HTML = /* html */ `
 `;
 
 export const INSIGHTS_JS = String.raw`
-const ALL_VIEWS = ['dashboard', 'adoption', 'churn', 'upsell', 'signals', 'catalog', 'alerts', 'rules', 'teams', 'recon', 'reports', 'cx', 'support', 'broadcasts', 'users'];
+const ALL_VIEWS = ['dashboard', 'adoption', 'churn', 'upsell', 'signals', 'adoptionsettings', 'catalog', 'alerts', 'rules', 'teams', 'recon', 'reports', 'cx', 'support', 'broadcasts', 'users'];
 const AUDIENCE_LABELS = { executive: 'Leadership', csm: 'CSM portfolio', implementation: 'Implementation', support: 'Support' };
 const ROLE_AUDIENCES = { csm: ['csm'], implementation_manager: ['implementation'], support_specialist: ['support'] };
 const money = (kobo) => '₦' + (Number(BigInt(kobo) / 100n)).toLocaleString('en-NG');
@@ -727,9 +745,11 @@ async function openAdoption(id, boxId) {
         el('td', {}, slaChip(t.sla.firstResponse)), el('td', {}, slaChip(t.sla.resolution))))))) : el('p', { class: 'muted' }, 'No tickets in the last 90 days.')];
     // 4. modules
     const inUse = r.modules.filter((m) => m.status === 'in_use'); const unused = r.modules.filter((m) => m.status === 'unused');
+    const MARK = { met: '✓', not_met: '✗', unknown: '?' };
+    const judged = (m) => el('details', { class: 'small', style: 'margin:2px 0 6px' }, el('summary', { style: 'cursor:pointer;color:var(--muted)' }, 'How this is judged (' + (m.mode === 'ALL' ? 'all' : 'any one') + ' of ' + m.criteria.length + ')'), el('ul', { style: 'margin:4px 0 0;padding-left:16px;list-style:none' }, m.criteria.map((c) => el('li', { title: c.label }, el('b', { style: 'color:var(--' + (c.state === 'met' ? 'ok' : c.state === 'not_met' ? 'urgent' : 'muted') + ')' }, MARK[c.state] + ' '), c.label + ': ', el('span', { class: 'muted' }, c.detail)))));
     const modules = el('div', { class: 'grid2' },
-      el('div', { class: 'card detail' }, el('strong', {}, 'In use (' + inUse.length + ')'), inUse.length ? el('ul', { style: 'margin:0;padding-left:18px' }, inUse.map((m) => el('li', {}, el('b', {}, m.label), el('span', { class: 'small muted' }, ' · ' + (m.events30 ? m.events30.toLocaleString('en-NG') + ' actions in 30 days' : 'active') + (m.lastActive ? ', last ' + fmtDate(m.lastActive) : ''))))) : el('p', { class: 'muted small', style: 'margin:0' }, 'Nothing in use.')),
-      el('div', { class: 'card detail' }, el('strong', {}, 'Bought but not used (' + unused.length + ')'), unused.length ? el('ul', { style: 'margin:0;padding-left:18px' }, unused.map((m) => el('li', {}, el('b', {}, m.label), el('span', { class: 'small muted' }, m.lastActive ? ' · last used ' + fmtDate(m.lastActive) : ' · never used')))) : el('p', { class: 'muted small', style: 'margin:0' }, 'Everything bought is being used.')));
+      el('div', { class: 'card detail' }, el('strong', {}, 'In use (' + inUse.length + ')'), inUse.length ? el('ul', { style: 'margin:0;padding-left:18px' }, inUse.map((m) => el('li', {}, el('b', {}, m.label), el('span', { class: 'small muted' }, ' · ' + (m.events30 ? m.events30.toLocaleString('en-NG') + ' actions in 30 days' : 'active') + (m.lastActive ? ', last ' + fmtDate(m.lastActive) : '')), judged(m)))) : el('p', { class: 'muted small', style: 'margin:0' }, 'Nothing in use.')),
+      el('div', { class: 'card detail' }, el('strong', {}, 'Bought but not used (' + unused.length + ')'), unused.length ? el('ul', { style: 'margin:0;padding-left:18px' }, unused.map((m) => el('li', {}, el('b', {}, m.label), el('span', { class: 'small muted' }, m.lastActive ? ' · last used ' + fmtDate(m.lastActive) : ' · never used'), judged(m)))) : el('p', { class: 'muted small', style: 'margin:0' }, 'Everything bought is being used.')));
     // 5. churn
     const churn = el('div', { class: 'grid2' },
       el('div', { class: 'card detail' }, el('div', { class: 'bar' }, el('strong', {}, 'Churn risk'), riskChip(r.churn.level), el('b', {}, String(r.churn.score) + ' of 100')), r.churn.reasons.length ? el('ul', { style: 'margin:0;padding-left:18px' }, r.churn.reasons.map((x) => el('li', {}, x.text + ' (' + pts(x.points) + ')'))) : el('p', { class: 'muted small', style: 'margin:0' }, 'Nothing is pointing to churn.')),
@@ -753,5 +773,117 @@ async function openAdoption(id, boxId) {
       sec('6. Upsell opportunities', upsell),
       sec('7. Growth plans', signals));
   } catch (err) { box.replaceChildren(el('p', { class: 'muted' }, err.message)); }
+}
+
+/* ---------- Adoption settings (Head of CX) ---------- */
+const asState = { data: null, draft: null };
+const WINDOW_LABEL = { 7: '7 days', 14: '14 days', 30: '30 days', 45: '45 days', 60: '60 days', 90: '90 days' };
+const CRIT_DEFAULTS = {
+  CONFIGURED: { type: 'CONFIGURED' },
+  LAST_REQUEST: { type: 'LAST_REQUEST', eventTypes: ['LEAVE_REQUEST'], withinDays: 30, minCount: 1 },
+  ACTIVITY: { type: 'ACTIVITY', eventTypes: [], withinDays: 30, minEvents: 1, minActiveEmployees: 0 },
+  LOGIN: { type: 'LOGIN', withinDays: 14, minActiveEmployees: 5 },
+  ADMIN_LOGIN: { type: 'ADMIN_LOGIN', withinDays: 30, who: 'any' },
+  PAYSLIP: { type: 'PAYSLIP', eventTypes: ['PAYSLIP_GENERATED'], withinDays: 45, minCount: 1 },
+  PAYROLL_RUN: { type: 'PAYROLL_RUN', withinDays: 45 },
+  PAY_SCHEDULE: { type: 'PAY_SCHEDULE' },
+  LAST_USED: { type: 'LAST_USED', source: 'ewa', withinDays: 30 },
+};
+function numField(label, value, onchange, opts) {
+  opts = opts || {};
+  const i = el('input', { type: 'number', value: String(value), min: String(opts.min ?? 0), max: String(opts.max ?? 1000000), style: 'width:' + (opts.w || 90) + 'px', 'aria-label': label, onchange: (e) => onchange(Number(e.target.value)) });
+  return el('label', { class: 'small', style: 'display:flex;gap:6px;align-items:center' }, label, i);
+}
+function selField(label, value, options, onchange) {
+  return el('label', { class: 'small', style: 'display:flex;gap:6px;align-items:center' }, label, el('select', { 'aria-label': label, onchange: (e) => onchange(e.target.value) }, options.map(([v, l]) => el('option', { value: String(v), selected: String(v) === String(value) }, l))));
+}
+const winSelect = (c) => selField('within', c.withinDays, asState.data.windows.map((w) => [w, WINDOW_LABEL[w]]), (v) => (c.withinDays = Number(v)));
+function critRow(rule, c, redraw) {
+  const kinds = asState.data.criteriaKinds;
+  const row = el('div', { class: 'bar', style: 'padding:8px;border:1px solid var(--line);border-radius:8px;gap:10px' });
+  row.append(selField('', c.type, kinds.map((k) => [k.type, k.label]), (v) => { rule.criteria[rule.criteria.indexOf(c)] = Object.assign({}, CRIT_DEFAULTS[v]); redraw(); }));
+  const codes = (label) => el('label', { class: 'small', style: 'display:flex;gap:6px;align-items:center' }, label, el('input', { value: (c.eventTypes || []).join(', '), placeholder: c.type === 'ACTIVITY' ? 'blank = any event' : 'e.g. LEAVE_REQUEST', style: 'width:230px', 'aria-label': label, onchange: (e) => (c.eventTypes = e.target.value.split(',').map((x) => x.trim().toUpperCase()).filter(Boolean)) }));
+  if (c.type === 'LAST_REQUEST') row.append(codes('Request types'), winSelect(c), numField('at least', c.minCount, (v) => (c.minCount = v), { min: 1 }));
+  else if (c.type === 'ACTIVITY') row.append(codes('Events'), winSelect(c), numField('at least', c.minEvents, (v) => (c.minEvents = v), { min: 1 }), numField('by employees on a day', c.minActiveEmployees, (v) => (c.minActiveEmployees = v), { w: 70 }));
+  else if (c.type === 'LOGIN') row.append(winSelect(c), numField('employees on a day', c.minActiveEmployees, (v) => (c.minActiveEmployees = v), { min: 1, w: 70 }));
+  else if (c.type === 'ADMIN_LOGIN') row.append(selField('who', c.who, [['any', 'Any admin'], ['primary', 'Primary admin']], (v) => (c.who = v)), winSelect(c));
+  else if (c.type === 'PAYSLIP') row.append(codes('Payslip events'), winSelect(c), numField('at least', c.minCount, (v) => (c.minCount = v), { min: 1 }));
+  else if (c.type === 'PAYROLL_RUN') row.append(winSelect(c));
+  else if (c.type === 'LAST_USED') row.append(selField('source', c.source, [['ewa', 'Wage access'], ['statutory', 'Statutory remittance']], (v) => (c.source = v)), winSelect(c));
+  else row.append(el('span', { class: 'small muted' }, kinds.find((k) => k.type === c.type).help));
+  row.append(el('button', { class: 'btn', type: 'button', style: 'margin-left:auto', onclick: () => { rule.criteria.splice(rule.criteria.indexOf(c), 1); redraw(); } }, 'Remove'));
+  return row;
+}
+function usageCard(u) {
+  const rule = structuredClone(u.rule);
+  const card = el('div', { class: 'card detail' });
+  const result = el('div', {});
+  const redraw = () => {
+    card.replaceChildren(
+      el('div', { class: 'bar' }, el('strong', { style: 'font-size:16px' }, u.label), u.isDefault ? el('span', { class: 'chip low' }, 'default') : el('span', { class: 'chip ok' }, 'customised'), u.active ? null : el('span', { class: 'chip high' }, 'off sale'),
+        selField('In use when', rule.mode, [['ANY', 'any one of these is met'], ['ALL', 'all of these are met']], (v) => (rule.mode = v))),
+      ...rule.criteria.map((c) => critRow(rule, c, redraw)),
+      el('div', { class: 'bar' },
+        selField('', '', [['', 'Add a criterion...']].concat(asState.data.criteriaKinds.map((k) => [k.type, k.label])), (v) => { if (v) { rule.criteria.push(Object.assign({}, CRIT_DEFAULTS[v])); redraw(); } }),
+        el('button', { class: 'btn', type: 'button', onclick: async () => { result.replaceChildren(el('span', { class: 'muted small' }, 'Checking every client...')); try { const r = await api('/adoption/settings/usage/' + u.module + '/preview', { method: 'POST', body: JSON.stringify(rule) }); result.replaceChildren(el('div', { class: 'notice' }, r.bought === 0 ? 'Nobody has bought this module yet.' : 'Of ' + r.bought + ' clients that bought it, ' + r.inUseDraft + ' would count as using it. Now: ' + r.inUseNow + '. ' + (r.totalChanges ? r.totalChanges + ' would change.' : 'Nobody would change.')), ...(r.changes.length ? [el('ul', { class: 'small', style: 'margin:6px 0 0;padding-left:18px' }, r.changes.map((x) => el('li', {}, el('b', {}, x.name), x.draft ? ' would count as in use' : ' would stop counting as in use', x.why ? ': ' + x.why : '')))] : [])); } catch (err) { result.replaceChildren(el('div', { class: 'notice err' }, err.message)); } } }, 'Try it'),
+        el('button', { class: 'btn primary', type: 'button', onclick: async () => { try { asState.data = await api('/adoption/settings/usage/' + u.module, { method: 'PUT', body: JSON.stringify(rule) }); adState.catalog = null; notice('Saved. Adoption numbers now use this rule.'); drawSettings(); } catch (err) { if (err.message !== 'unauthorized') notice(err.message, true); } } }, 'Save'),
+        u.isDefault ? null : el('button', { class: 'btn', type: 'button', onclick: async () => { try { asState.data = await api('/adoption/settings/usage/' + u.module + '/reset', { method: 'POST' }); notice('Back to the default rule'); drawSettings(); } catch (err) { notice(err.message, true); } } }, 'Reset to default')),
+      result);
+  };
+  redraw();
+  return card;
+}
+function getPath(o, path) { return path.split('.').reduce((x, k) => (x == null ? x : x[k]), o); }
+function setPath(o, path, v) { const parts = path.split('.'); let c = o; for (const k of parts.slice(0, -1)) c = c[k]; c[parts[parts.length - 1]] = v; }
+function drawSettings() {
+  const d = asState.data; const draft = (asState.draft = structuredClone(d.scoring));
+  $('as-usage').replaceChildren(...d.usage.map(usageCard));
+  $('as-scoring-note').textContent = d.scoringChangedBy ? 'Last saved by ' + d.scoringChangedBy + '. A value that differs from the built-in default is highlighted.' : 'These are the built-in defaults. A value you change is highlighted.';
+  const groups = [...new Set(d.fields.map((f) => f.group))];
+  $('as-scoring').replaceChildren(...groups.map((g) => el('details', { class: 'card detail', open: g.startsWith('Adoption bands') || g === 'Churn risk: levels' }, el('summary', { style: 'cursor:pointer' }, el('strong', {}, g)),
+    el('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px;margin-top:10px' }, d.fields.filter((f) => f.group === g).map((f) => {
+      const def = getPath(d.defaults, f.path);
+      const i = el('input', { type: 'number', value: String(getPath(draft, f.path)), min: String(f.min), max: String(f.max), style: 'width:80px', 'aria-label': f.label, onchange: (e) => { setPath(draft, f.path, Number(e.target.value)); i.style.background = Number(e.target.value) === def ? '' : 'var(--yellow)'; } });
+      if (getPath(draft, f.path) !== def) i.style.background = 'var(--yellow)';
+      return el('label', { class: 'small', style: 'display:flex;gap:8px;align-items:center;justify-content:space-between' }, el('span', {}, f.label, f.help ? el('div', { class: 'muted' }, f.help) : null), el('span', { style: 'white-space:nowrap' }, i, ' ', el('span', { class: 'muted' }, f.unit === 'percent' ? '%' : f.unit), el('div', { class: 'muted' }, 'default ' + def + ' (' + f.min + ' to ' + f.max + ')')));
+    })))));
+  // holds
+  const holdLabels = { churnHigh: 'High churn risk', atRisk: 'HubSpot health is At Risk', urgentAlerts: 'Urgent or high alerts are open', detractor: 'The customer is an NPS detractor' };
+  $('as-holds').replaceChildren(el('strong', {}, 'Do not push an upsell when...'), ...Object.entries(holdLabels).map(([k, l]) => el('label', { class: 'small', style: 'display:flex;gap:8px;align-items:center' }, el('input', { type: 'checkbox', checked: draft.holds[k], onchange: (e) => (draft.holds[k] = e.target.checked) }), l)));
+  // related modules
+  const mods = d.usage.map((u) => [u.module, u.label]);
+  const relRows = el('div', { style: 'display:grid;gap:6px' });
+  const addRel = (module, r) => {
+    const row = el('div', { class: 'bar', 'data-rel': '1' });
+    const m = el('select', { 'aria-label': 'Module' }, mods.map(([k, l]) => el('option', { value: k, selected: k === module }, l)));
+    const uses = el('select', { 'aria-label': 'Uses' }, mods.map(([k, l]) => el('option', { value: k, selected: k === r.uses }, l)));
+    const why = el('input', { value: r.because, maxlength: '120', style: 'flex:1;min-width:220px', placeholder: 'why, e.g. runs payroll but does remittance by hand', 'aria-label': 'Why' });
+    row.append('Offer', m, 'to clients that use', uses, why, el('button', { class: 'btn', type: 'button', onclick: () => row.remove() }, 'Remove'));
+    row.read = () => ({ module: m.value, uses: uses.value, because: why.value.trim() });
+    relRows.append(row);
+  };
+  Object.entries(draft.related).forEach(([m, list]) => list.forEach((r) => addRel(m, r)));
+  $('as-related').replaceChildren(el('strong', {}, 'Related modules'), el('p', { class: 'small muted', style: 'margin:0' }, 'A client that already uses one module is a better prospect for the module that goes with it.'), relRows, el('div', {}, el('button', { class: 'btn', type: 'button', onclick: () => addRel(mods[0][0], { uses: mods[0][0], because: '' }) }, 'Add a relationship')));
+  asState.readRelated = () => { const out = {}; for (const row of relRows.children) { const r = row.read(); (out[r.module] = out[r.module] || []).push({ uses: r.uses, because: r.because }); } return out; };
+  // affinities
+  const kinds = { FUNDRAISE: 'Fund raise', EXPANSION: 'Expansion plans', HIRING_PLAN: 'Hiring plans', OTHER: 'Other growth news' };
+  const aff = {};
+  $('as-affinity').replaceChildren(el('strong', {}, 'Which modules each kind of growth news points to'), el('p', { class: 'small muted', style: 'margin:0' }, 'Module keys, separated by commas. These get the full growth-plan points; every other module gets the smaller general amount.'),
+    ...Object.entries(kinds).map(([k, l]) => { const i = el('input', { value: (draft.signalAffinity[k] || []).join(', '), style: 'flex:1;min-width:260px', 'aria-label': l }); aff[k] = i; return el('label', { class: 'bar small' }, el('span', { style: 'min-width:130px' }, l), i); }));
+  asState.readAffinity = () => Object.fromEntries(Object.entries(aff).map(([k, i]) => [k, i.value.split(',').map((x) => x.trim().toUpperCase()).filter(Boolean)]));
+}
+async function saveSettings() {
+  const body = structuredClone(asState.draft);
+  body.related = asState.readRelated(); body.signalAffinity = asState.readAffinity();
+  try { asState.data = await api('/adoption/settings/scoring', { method: 'PUT', body: JSON.stringify(body) }); adState.catalog = null; notice('Saved. Every score now uses these settings.'); drawSettings(); } catch (err) { if (err.message !== 'unauthorized') notice(err.message, true); }
+}
+async function loadAdoptionSettings() {
+  asState.data = await api('/adoption/settings');
+  if (!$('as-save').dataset.wired) {
+    $('as-save').dataset.wired = '1';
+    $('as-save').addEventListener('click', saveSettings); $('as-save2').addEventListener('click', saveSettings);
+    $('as-reset').addEventListener('click', async () => { if (!window.confirm('Reset every scoring weight, hold, relationship and growth-plan mapping to the built-in defaults?')) return; try { asState.data = await api('/adoption/settings/scoring/reset', { method: 'POST' }); adState.catalog = null; notice('Scoring reset to the defaults'); drawSettings(); } catch (err) { notice(err.message, true); } });
+  }
+  drawSettings();
 }
 `;

@@ -214,12 +214,16 @@ const at = (now: Date, daysAgo: number, hour = 9, minute = 0): string => {
   return d.toISOString();
 };
 
+/** purchasedOn as given; configuredOn a few days later, except where setup was never finished. */
+const mods = (clientId: string, modules: string[], purchasedOn: string, notConfigured: string[] = []): ClientModule[] =>
+  modules.map((module) => ({ clientId, module, purchasedOn, configuredOn: notConfigured.includes(module) ? null : purchasedOn }));
+
 export const FIXTURE_MODULES: ClientModule[] = [
-  ...['PAYROLL', 'CORE_HR', 'LEAVE', 'EWA'].map((module) => ({ clientId: 'CP-100', module, purchasedOn: '2025-03-01' })),
-  ...['PAYROLL', 'CORE_HR', 'LEAVE', 'STATUTORY'].map((module) => ({ clientId: 'CP-200', module, purchasedOn: '2025-06-15' })),
-  ...['PAYROLL', 'CORE_HR', 'LEAVE', 'LOANS', 'EWA', 'STATUTORY'].map((module) => ({ clientId: 'CP-300', module, purchasedOn: '2024-12-01' })),
-  ...['PAYROLL', 'CORE_HR'].map((module) => ({ clientId: 'CP-600', module, purchasedOn: '2026-09-28' })),
-  ...['PAYROLL', 'CORE_HR'].map((module) => ({ clientId: 'CP-700', module, purchasedOn: '2026-10-12' })),
+  ...mods('CP-100', ['PAYROLL', 'CORE_HR', 'LEAVE', 'EWA'], '2025-03-01'),
+  ...mods('CP-200', ['PAYROLL', 'CORE_HR', 'LEAVE', 'STATUTORY'], '2025-06-15'),
+  ...mods('CP-300', ['PAYROLL', 'CORE_HR', 'LEAVE', 'LOANS', 'EWA', 'STATUTORY'], '2024-12-01', ['LOANS']), // bought Loans, never set it up
+  ...mods('CP-600', ['PAYROLL', 'CORE_HR'], '2026-09-28'),
+  ...mods('CP-700', ['PAYROLL', 'CORE_HR'], '2026-10-12', ['PAYROLL', 'CORE_HR']), // bought, not set up
 ];
 
 /** Who the admins are. Lekki's primary admin has gone quiet; Kano's secondary has never logged in. */
@@ -283,6 +287,14 @@ export function fixtureEmployeeActivity(now: Date, since: IsoDate): EmployeeActi
         out.push({ clientId: p.clientId, date, module: m.module, eventType: m.event, events, activeEmployees: Math.max(1, Math.min(p.users, Math.round(events * (m.event === 'SIGN_IN' ? 0.9 : 0.8)))) });
       });
     });
+  }
+  // Payslips generated on each payroll run: one event per employee paid, on the pay date and a month before.
+  for (const a of FIXTURE_ACCOUNTS) {
+    if (!a.lastPayrollPayDate) continue;
+    for (const back of [0, 30]) {
+      const date = new Date(Date.parse(`${a.lastPayrollPayDate}T00:00:00Z`) - back * DAY_MS).toISOString().slice(0, 10);
+      if (date >= since) out.push({ clientId: a.clientId, date, module: 'PAYROLL', eventType: 'PAYSLIP_GENERATED', events: a.activeUsers, activeEmployees: a.activeUsers });
+    }
   }
   return out;
 }
