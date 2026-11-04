@@ -107,7 +107,7 @@ describe('API with Google sign-in and roles', () => {
   });
 
   it('tells the web app who is signed in', async () => {
-    await http().get('/me').set(as('director@example.com')).expect(200, { email: 'director@example.com', role: 'cs_director' });
+    await http().get('/me').set(as('director@example.com')).expect(200, { email: 'director@example.com', role: 'cs_director', isAdmin: true });
   });
 
   it('lets directors manage team leads, and logs it', async () => {

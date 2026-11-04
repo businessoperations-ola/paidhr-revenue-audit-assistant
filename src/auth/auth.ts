@@ -87,8 +87,11 @@ export class AuthGuard implements CanActivate {
         if (err instanceof UnauthorizedException) throw err;
         throw new UnauthorizedException('Invalid Google ID token');
       }
-      const { rows } = await this.db.query<{ role: Role }>('SELECT role FROM app_user WHERE email = $1', [email]);
+      const { rows } = await this.db.query<{ role: Role; active: boolean }>('SELECT role, active FROM app_user WHERE email = $1', [email]);
       if (!rows[0]) throw new ForbiddenException(`${email} has no access to the Audit Assistant`);
+      if (!rows[0].active) throw new ForbiddenException(`${email} has been deactivated. Ask an admin to restore access.`);
+      // Record sign-ins at most once an hour, so this is not a write on every request.
+      await this.db.query(`UPDATE app_user SET last_seen_at = now() WHERE email = $1 AND (last_seen_at IS NULL OR last_seen_at < now() - interval '1 hour')`, [email]);
       user = { email, role: rows[0].role };
     }
     req.user = user;

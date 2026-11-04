@@ -199,7 +199,7 @@ export class EscalationService {
   /** Every CS Director with access; the fallback list if none is set up yet. */
   private async directors(): Promise<string[]> {
     const { rows } = await this.db.query<{ email: string }>(
-      `SELECT email FROM app_user WHERE role = 'cs_director' ORDER BY email`,
+      `SELECT email FROM app_user WHERE active AND role = 'cs_director' ORDER BY email`,
     );
     // Sorted here rather than in SQL, so the order doesn't depend on the database collation.
     return rows.length > 0 ? rows.map((r) => r.email).sort() : this.cfg.FALLBACK_ALERT_EMAILS;

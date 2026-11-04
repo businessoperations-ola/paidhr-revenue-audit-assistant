@@ -334,7 +334,7 @@ export class BroadcastService {
   }
 
   private async users(): Promise<Array<{ email: string; role: string }>> {
-    return (await this.db.query<{ email: string; role: string }>('SELECT email, role FROM app_user ORDER BY email')).rows;
+    return (await this.db.query<{ email: string; role: string }>('SELECT email, role FROM app_user WHERE active ORDER BY email')).rows;
   }
 
   private async startRun(broadcastId: number, trigger: 'manual' | 'schedule', startedBy: string, expectedSendable?: number): Promise<RunRecord> {

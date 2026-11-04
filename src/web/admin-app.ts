@@ -49,13 +49,31 @@ header.top { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 28px
 .brand { display: flex; align-items: center; gap: 12px; text-decoration: none; }
 .brand img { height: 30px; width: auto; display: block; }
 .brand span { font-weight: 600; color: var(--nav-ink); font-size: 14px; padding-left: 12px; border-left: 1px solid var(--field); white-space: nowrap; }
-nav { display: flex; gap: 6px; flex-wrap: wrap; }
-nav button { font: 500 15px var(--font); padding: 8px 10px; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--nav-ink); cursor: pointer; }
-nav button:hover { color: var(--blue-2); }
-nav button[aria-current="page"] { color: var(--blue-2); border-bottom-color: var(--blue-2); }
+header.top { position: sticky; top: 0; z-index: 4; }
+.shell { display: grid; grid-template-columns: 236px minmax(0, 1fr); align-items: start; }
+nav { position: sticky; top: 62px; display: grid; gap: 2px; padding: 20px 14px; align-content: start; min-height: calc(100vh - 62px); border-right: 1px solid var(--line); background: var(--surface); }
+nav .group { font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); padding: 14px 12px 6px; }
+nav .group:first-child { padding-top: 0; }
+nav button { font: 500 15px var(--font); text-align: left; padding: 9px 12px; border: 0; border-radius: 8px; background: none; color: var(--nav-ink); cursor: pointer; }
+nav button:hover { background: var(--blue-faint); }
+nav button[aria-current="page"] { background: var(--blue-soft); color: var(--navy); font-weight: 600; }
+@media (max-width: 860px) {
+  .shell { grid-template-columns: 1fr; }
+  nav { position: static; display: flex; overflow-x: auto; min-height: 0; padding: 8px 12px; border-right: 0; border-bottom: 1px solid var(--line); }
+  nav .group { display: none; }
+  nav button { white-space: nowrap; }
+}
+.role-chip { font: 600 12px var(--font); padding: 3px 10px; border-radius: 999px; background: var(--blue-soft); color: var(--navy); text-transform: capitalize; }
+.role-chip.admin { background: var(--yellow); color: var(--midnight); }
+.tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; border-radius: 10px; background: var(--blue-faint); }
+.tabs button { font: 600 14px var(--font); padding: 9px 12px; border: 0; border-radius: 8px; background: none; color: var(--nav-ink); cursor: pointer; }
+.tabs button[aria-selected="true"] { background: #fff; color: var(--blue); box-shadow: 0 1px 3px rgba(11, 26, 60, .15); }
+.features { list-style: none; padding: 0; margin: 28px 0 0; display: grid; gap: 12px; max-width: 46ch; }
+.features li { display: flex; gap: 12px; align-items: flex-start; color: rgba(255, 255, 255, .92); font-size: 16px; }
+.features li::before { content: ""; flex: none; width: 22px; height: 22px; margin-top: 2px; border-radius: 50%; background: var(--yellow) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M6 12.5l4 4 8-9' fill='none' stroke='%230b1a3c' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 14px no-repeat; }
 .who { margin-left: auto; font-size: 13px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
 
-main { padding: 24px max(16px, 3vw) 56px; max-width: 1200px; margin: 0 auto; display: grid; gap: 16px; }
+main { padding: 24px max(16px, 3vw) 56px; width: 100%; max-width: 1200px; margin: 0 auto; display: grid; gap: 16px; }
 main > * { min-width: 0; }
 h2 { font-size: 24px; margin: 0; }
 .bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
@@ -120,12 +138,6 @@ td strong { color: var(--nav-ink); }
 <div class="strip" id="strip" hidden>Alerts are in <b>dry-run mode</b>: nothing is sent to CSMs, team leads or HubSpot.</div>
 <header class="top" id="top" hidden>
   <a class="brand" href="#alerts" aria-label="PaidHR Audit Assistant"><img src="${LOGO_BLUE_DATA_URI}" alt="PaidHR" width="86" height="30"><span>Audit Assistant</span></a>
-  <nav id="nav" hidden>
-    <button data-view="alerts" aria-current="page">Alerts</button>
-    <button data-view="rules">Rules</button>
-    <button data-view="teams">Team leads</button>
-    <button data-view="recon">Reconciliation</button>
-  </nav>
   <div class="who" id="who"></div>
 </header>
 <section id="signin" class="signin-page" hidden>
@@ -136,17 +148,29 @@ td strong { color: var(--nav-ink); }
   <div class="signin-body">
     <div class="signin-pitch">
       <h1>Revenue &amp; Data Audit Assistant</h1>
-      <p>Billing checks, late payroll and customer engagement alerts for the PaidHR CX team.</p>
+      <p>One place for the PaidHR CX team to catch billing and payroll problems, grow accounts and keep customers.</p>
+      <ul class="features">
+        <li>Daily checks on billing, payroll and account data, sent to the right CSM</li>
+        <li>Leadership, CSM, implementation and support reports</li>
+        <li>Onboarding, expansion and support tools for the CX team</li>
+        <li>Admin console for rules, users and broadcasts</li>
+      </ul>
     </div>
     <div class="signin-card">
-      <h2>Welcome back!</h2>
-      <p>Sign in with your PaidHR Google Workspace account.</p>
+      <div class="tabs" role="tablist" aria-label="Sign in as">
+        <button role="tab" id="tab-staff" aria-selected="true">Staff</button>
+        <button role="tab" id="tab-admin" aria-selected="false">Admin</button>
+      </div>
+      <h2 id="signin-title">Welcome back!</h2>
+      <p id="signin-sub">Sign in with your PaidHR Google Workspace account to see your alerts, reports and tools.</p>
       <div id="signin-notice" class="notice err" role="alert" hidden></div>
       <div class="gbtn-wrap" id="gbtn"></div>
-      <p class="fine">Only company accounts with access granted by a super admin can sign in.</p>
+      <p class="fine">Only company accounts that an admin has added can sign in. Need access? Ask your CS Director.</p>
     </div>
   </div>
 </section>
+<div class="shell" id="shell" hidden>
+<nav id="nav" aria-label="Main"></nav>
 <main id="app">
   <div id="notice" class="notice" role="status" hidden></div>
 
@@ -192,6 +216,7 @@ td strong { color: var(--nav-ink); }
   </section>
 ${INSIGHTS_HTML}
 </main>
+</div>
 
 <script>
 const TITLES = ${JSON.stringify(FLAG_TITLES)};
@@ -207,7 +232,7 @@ const RULE_LABELS = {
   mandatory_fields: 'Mandatory HubSpot fields',
   seat_history_days: 'Seat history to compare (days)',
 };
-const state = { token: null, me: null, view: 'alerts', dryRun: false };
+const state = { token: null, me: null, view: 'alerts', dryRun: false, entry: 'staff' };
 
 function el(tag, attrs = {}, ...children) {
   const n = document.createElement(tag);
@@ -241,14 +266,24 @@ async function api(path, opts = {}) {
 
 function signOut(message) {
   state.token = null; state.me = null; store('idToken', null);
-  $('nav').hidden = true; $('who').textContent = '';
+  $('shell').hidden = true; $('who').textContent = '';
   document.querySelectorAll('main > section').forEach((s) => (s.hidden = true));
   $('top').hidden = true; $('app').hidden = true; $('strip').hidden = true;
   $('signin').hidden = false;
   if (message) notice(message, true);
 }
 
+function setEntry(entry) {
+  state.entry = entry; store('entry', entry);
+  $('tab-staff').setAttribute('aria-selected', String(entry === 'staff')); $('tab-admin').setAttribute('aria-selected', String(entry === 'admin'));
+  $('signin-title').textContent = entry === 'admin' ? 'Admin console' : 'Welcome back!';
+  $('signin-sub').textContent = entry === 'admin' ? 'For super admins and CS Directors. Manage users, rules, team leads and broadcasts.' : 'Sign in with your PaidHR Google Workspace account to see your alerts, reports and tools.';
+}
+$('tab-staff').addEventListener('click', () => setEntry('staff'));
+$('tab-admin').addEventListener('click', () => setEntry('admin'));
+
 async function start() {
+  setEntry(recall('entry') === 'admin' ? 'admin' : 'staff');
   const cfg = await fetch('/app-config').then((r) => r.json());
   state.dryRun = !!cfg.alertsDryRun;
   if (cfg.helpEmail) { $('help').href = 'mailto:' + cfg.helpEmail; $('help').hidden = false; }
@@ -268,22 +303,55 @@ async function start() {
 
 async function enter() {
   state.me = await api('/me');
+  if (state.entry === 'admin' && !state.me.isAdmin && !(state.token == null)) {
+    const email = state.me.email; signOut();
+    notice(email + ' is not an administrator. Use the Staff tab to sign in.', true); return;
+  }
   $('signin').hidden = true; $('signin-notice').hidden = true;
-  $('top').hidden = false; $('app').hidden = false; $('nav').hidden = false; $('strip').hidden = !state.dryRun; notice('');
-  $('who').replaceChildren(el('span', {}, state.me.email + ' · ' + state.me.role.replace(/_/g, ' ')),
+  $('top').hidden = false; $('app').hidden = false; $('shell').hidden = false; $('strip').hidden = !state.dryRun; notice('');
+  $('who').replaceChildren(el('span', { class: 'role-chip' + (state.me.isAdmin ? ' admin' : ''), style: state.me.role === 'csm' ? 'text-transform:uppercase' : '' }, state.me.role.replace(/_/g, ' ')), el('span', {}, state.me.email),
     el('button', { class: 'btn', onclick: () => signOut() }, 'Sign out'));
-  show(location.hash.slice(1) || 'alerts');
+  buildNav();
+  const wanted = location.hash.slice(1);
+  const first = state.me.isAdmin && state.entry === 'admin' ? 'users' : 'alerts';
+  show(allowedViews().includes(wanted) ? wanted : first);
+}
+
+const NAV = [
+  { v: 'alerts', label: 'Alerts', group: 'Workspace' },
+  { v: 'reports', label: 'Reports', group: 'Workspace' },
+  { v: 'cx', label: 'Growth', group: 'Workspace', not: ['support_specialist'] },
+  { v: 'support', label: 'Support themes', group: 'Workspace', not: ['csm', 'implementation_manager'] },
+  { v: 'rules', label: 'Rules', group: 'admin', also: ['cs_team_lead', 'viewer'] },
+  { v: 'teams', label: 'Team leads', group: 'admin', also: ['cs_team_lead', 'viewer'] },
+  { v: 'recon', label: 'Reconciliation', group: 'admin', also: ['cs_team_lead', 'viewer'] },
+  { v: 'broadcasts', label: 'Broadcasts', group: 'admin' },
+  { v: 'users', label: 'Users', group: 'admin' },
+];
+function navItems() {
+  const r = state.me.role;
+  return NAV.filter((i) => i.group === 'admin' ? (state.me.isAdmin || (i.also || []).includes(r)) : !(i.not || []).includes(r));
+}
+const allowedViews = () => navItems().map((i) => i.v);
+function buildNav() {
+  const nav = $('nav'); nav.replaceChildren();
+  let last = null;
+  for (const i of navItems()) {
+    const g = i.group === 'admin' ? (state.me.isAdmin ? 'Administration' : 'Reference') : i.group;
+    if (g !== last) { nav.append(el('div', { class: 'group' }, g)); last = g; }
+    nav.append(el('button', { 'data-view': i.v }, i.label));
+  }
 }
 
 function show(view) {
-  if (!ALL_VIEWS.includes(view)) view = 'alerts';
+  if (!allowedViews().includes(view)) view = allowedViews()[0];
   state.view = view;
   if (location.hash.slice(1) !== view) history.replaceState(null, '', '#' + view);
   document.querySelectorAll('nav button').forEach((b) => b.setAttribute('aria-current', b.dataset.view === view ? 'page' : 'false'));
   for (const v of ALL_VIEWS) $('view-' + v).hidden = v !== view;
-  ({ alerts: loadFlags, rules: loadRules, teams: loadTeams, recon: loadRecon, reports: loadReports, cx: loadCx, support: loadSupport, broadcasts: loadBroadcasts })[view]().catch((e) => e.message !== 'unauthorized' && notice(e.message, true));
+  ({ alerts: loadFlags, rules: loadRules, teams: loadTeams, recon: loadRecon, reports: loadReports, cx: loadCx, support: loadSupport, broadcasts: loadBroadcasts, users: loadUsers })[view]().catch((e) => e.message !== 'unauthorized' && notice(e.message, true));
 }
-$('nav').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) show(b.dataset.view); });
+$('nav').addEventListener('click', (e) => { const b = e.target.closest('button[data-view]'); if (b) show(b.dataset.view); });
 window.addEventListener('hashchange', () => state.me && show(location.hash.slice(1)));
 
 /* ---------- Alerts ---------- */
