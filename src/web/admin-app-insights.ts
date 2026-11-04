@@ -420,7 +420,7 @@ function drawClients() {
     el('td', {}, seatBar(c)),
     el('td', { class: c.daysSinceContact == null || c.daysSinceContact > 30 ? '' : 'muted' }, c.daysSinceContact != null && c.daysSinceContact > 30 ? el('b', { style: 'color:var(--high)' }, ago(c.daysSinceContact)) : ago(c.daysSinceContact)),
     el('td', {}, payrollChip(c.payroll)),
-    el('td', {}, c.openAlerts ? el('span', { class: 'chip ' + (c.topSeverity || 'low') }, c.openAlerts + ' ' + c.topSeverity) : el('span', { class: 'muted small' }, 'None')),
+    el('td', {}, c.openAlerts ? el('span', { class: 'chip ' + (c.topSeverity || 'low'), title: 'Most serious: ' + c.topSeverity }, c.openAlerts + (c.openAlerts === 1 ? ' alert' : ' alerts')) : el('span', { class: 'muted small' }, 'None')),
     el('td', {}, c.openTickets ? String(c.openTickets) : el('span', { class: 'muted small' }, '0')))) : [el('tr', {}, el('td', { colspan: '9', class: 'muted' }, d.clients.length ? 'No clients match your search.' : 'No clients are assigned yet.'))]));
 }
 function sparkline(points) {
