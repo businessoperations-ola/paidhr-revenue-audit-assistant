@@ -55,6 +55,10 @@ const schema = z.object({
   // HubSpot support-pipeline stage ids that mean "closed" (default pipeline: 4). Blank = use closed date.
   HS_TICKET_CLOSED_STAGE_IDS: z.string().default('4'),
   HS_TICKET_LOOKBACK_DAYS: z.coerce.number().default(120),
+  /** HubSpot property holding when support first replied. */
+  HS_PROP_TICKET_FIRST_RESPONSE: z.string().default('first_agent_reply_date'),
+  /** Optional HubSpot ticket property naming who raised it at the customer. Empty = not captured. */
+  HS_PROP_TICKET_RAISED_BY: z.string().default(''),
   // Only companies in this lifecycle stage are audited.
   HS_CUSTOMER_LIFECYCLE_STAGE: z.string().default('customer'),
 

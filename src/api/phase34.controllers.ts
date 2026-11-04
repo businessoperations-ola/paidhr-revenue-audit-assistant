@@ -18,6 +18,7 @@ import { AnalyticsService } from '../analytics/analytics.service.js';
 import { Roles, type AuthUser } from '../auth/auth.js';
 import { BroadcastService } from '../broadcasts/broadcast.service.js';
 import { todayInLagos, type IsoDate } from '../common/calendar.js';
+import { AdoptionService } from '../adoption/adoption.service.js';
 import { CxService } from '../cx/cx.service.js';
 import { OrgService } from '../org/org.service.js';
 import { PortfolioService } from '../portfolio/portfolio.service.js';
@@ -317,6 +318,36 @@ export class PortfolioController {
   @Roles('csm', ...MANAGERS)
   async client(@Req() req: Req, @Param('hubspotId') hubspotId: string, @Query('date') date?: string) {
     const c = await this.portfolio.client(await this.org.scopeFor(req.user), dateParam(date), hubspotId);
+    if (!c) throw new NotFoundException('Client not found');
+    return c;
+  }
+}
+
+// ====================================================================== product adoption
+
+@Controller('adoption')
+export class AdoptionController {
+  constructor(
+    @Inject(AdoptionService) private readonly adoption: AdoptionService,
+    @Inject(OrgService) private readonly org: OrgService,
+  ) {}
+
+  /** Modules bought, in use and open for upsell, plus one adoption line per client in your scope. */
+  @Get()
+  @Roles('csm', ...MANAGERS)
+  async overview(@Req() req: Req, @Query('csm') csm?: string, @Query('date') date?: string) {
+    const scope = await this.org.scopeFor(req.user);
+    if (csm && !OrgService.includes(scope, csm)) throw new NotFoundException('Nobody by that email in your team');
+    const o = await this.adoption.overview(scope, dateParam(date), csm);
+    if (!o) throw new NotFoundException('No data has been loaded yet');
+    return { ...o, people: (await this.org.csmsIn(scope)).map((u) => ({ email: u.email, name: u.name })) };
+  }
+
+  /** Administrators, employee activity, support and SLA, and modules for one client. */
+  @Get('clients/:hubspotId')
+  @Roles('csm', ...MANAGERS)
+  async client(@Req() req: Req, @Param('hubspotId') hubspotId: string, @Query('date') date?: string) {
+    const c = await this.adoption.client(await this.org.scopeFor(req.user), dateParam(date), hubspotId);
     if (!c) throw new NotFoundException('Client not found');
     return c;
   }

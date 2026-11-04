@@ -52,6 +52,10 @@ describe('phase-1 daily pipeline against Postgres', () => {
       'SEAT_OVERAGE:Kano Holdings Group',
       'SUPPORT_ESCALATION_RISK:Abuja Tech Hub',
       'SUPPORT_ESCALATION_RISK:Kano Holdings Group',
+      'SUPPORT_SLA_BREACH:Abuja Tech Hub',
+      'SUPPORT_SLA_BREACH:Ibadan Clinics',
+      'SUPPORT_SLA_BREACH:Kano Holdings Group',
+      'SUPPORT_SLA_BREACH:Lekki Foods',
       'UNLINKED_CONTROL_PANEL_ACCOUNT:Port Harcourt Marine',
       'UNLINKED_HUBSPOT_COMPANY:Ibadan Clinics',
     ]);
@@ -64,7 +68,7 @@ describe('phase-1 daily pipeline against Postgres', () => {
     // Urgent late payroll gets its own email; Ngozi's other flag comes in a digest.
     const ngozi = outbox.emails.filter((e) => e.to.includes('ngozi.okafor@example.com'));
     expect(ngozi.map((e) => e.subject).sort()).toEqual([
-      '1 new audit flag need your attention',
+      '2 new audit flags need your attention',
       'URGENT: Payroll run is late at Lekki Foods',
     ]);
     // Accounts with no CSM go to the fallback list.
@@ -82,8 +86,8 @@ describe('phase-1 daily pipeline against Postgres', () => {
     expect(outbox.chats).toHaveLength(4);
     expect(outbox.chats.some((c) => c.text.startsWith('🚨 *Urgent'))).toBe(true);
 
-    // US-15: one HubSpot task per flag that has a HubSpot company (13 of 14), urgent = HIGH, owner = CSM.
-    expect(outbox.tasks).toHaveLength(13);
+    // US-15: one HubSpot task per flag that has a HubSpot company (17 of 18), urgent = HIGH, owner = CSM.
+    expect(outbox.tasks).toHaveLength(17);
     const payrollTask = outbox.tasks.find((t) => t.subject.includes('Payroll run is late'))!;
     expect(payrollTask).toMatchObject({ companyId: '1002', ownerId: '501', priority: 'HIGH' });
 
@@ -129,7 +133,7 @@ describe('phase-1 daily pipeline against Postgres', () => {
     const emailsAfterFirst = outbox.emails.length;
 
     const { rows } = await db.query(`SELECT status, count(*)::int AS n FROM alert WHERE channel = 'google_chat' GROUP BY status`);
-    expect(rows).toEqual([{ status: 'failed', n: 14 }]);
+    expect(rows).toEqual([{ status: 'failed', n: 18 }]);
 
     outbox.failChatTimes = 0;
     await jobs.run('dispatch', '2026-11-03');

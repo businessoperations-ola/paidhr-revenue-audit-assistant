@@ -315,6 +315,7 @@ async function enter() {
 
 const NAV = [
   { v: 'dashboard', label: 'Dashboard', group: 'Workspace', not: ['support_specialist', 'implementation_manager'] },
+  { v: 'adoption', label: 'Adoption', group: 'Workspace', not: ['support_specialist', 'implementation_manager'] },
   { v: 'alerts', label: 'Alerts', group: 'Workspace' },
   { v: 'reports', label: 'Reports', group: 'Workspace' },
   { v: 'cx', label: 'Growth', group: 'Workspace', not: ['support_specialist'] },
@@ -346,7 +347,7 @@ function show(view) {
   if (location.hash.slice(1) !== view) history.replaceState(null, '', '#' + view);
   document.querySelectorAll('nav button').forEach((b) => b.setAttribute('aria-current', b.dataset.view === view ? 'page' : 'false'));
   for (const v of ALL_VIEWS) $('view-' + v).hidden = v !== view;
-  ({ alerts: loadFlags, rules: loadRules, teams: loadTeams, recon: loadRecon, dashboard: loadDashboard, reports: loadReports, cx: loadCx, support: loadSupport, broadcasts: loadBroadcasts, users: loadUsers })[view]().catch((e) => e.message !== 'unauthorized' && notice(e.message, true));
+  ({ alerts: loadFlags, rules: loadRules, teams: loadTeams, recon: loadRecon, dashboard: loadDashboard, adoption: loadAdoption, reports: loadReports, cx: loadCx, support: loadSupport, broadcasts: loadBroadcasts, users: loadUsers })[view]().catch((e) => e.message !== 'unauthorized' && notice(e.message, true));
 }
 $('nav').addEventListener('click', (e) => { const b = e.target.closest('button[data-view]'); if (b) show(b.dataset.view); });
 window.addEventListener('hashchange', () => state.me && show(location.hash.slice(1)));

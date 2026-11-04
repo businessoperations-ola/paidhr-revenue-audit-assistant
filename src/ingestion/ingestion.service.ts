@@ -10,6 +10,7 @@ import {
   type ControlPanelSource,
   type HubSpotSource,
 } from '../sources/source.types.js';
+import { AdoptionRepository } from '../adoption/adoption.repository.js';
 import { SnapshotRepository } from './snapshot.repository.js';
 
 export interface IngestionResult {
@@ -19,6 +20,8 @@ export interface IngestionResult {
   accounts: number;
   tickets: number;
   revenueLines: number;
+  /** Adoption rows stored: admins, employee activity days, modules. */
+  adoption: { admins: number; activity: number; modules: number };
   /** Optional data that could not be loaded. Billing audits still ran. */
   warnings: string[];
 }
@@ -34,6 +37,7 @@ export class IngestionService {
     @Inject(SnapshotRepository) private readonly snapshots: SnapshotRepository,
     @Inject(HUBSPOT_SOURCE) private readonly hubspot: HubSpotSource,
     @Inject(CONTROL_PANEL_SOURCE) private readonly controlPanel: ControlPanelSource,
+    @Inject(AdoptionRepository) private readonly adoptionRepo: AdoptionRepository,
   ) {}
 
   async run(snapshotDate: IsoDate): Promise<IngestionResult> {
@@ -77,9 +81,31 @@ export class IngestionService {
       } catch (err) {
         warnings.push(`Expansion revenue not loaded: ${err instanceof Error ? err.message : String(err)}`);
       }
+      const adoption = { admins: 0, activity: 0, modules: 0 };
+      try {
+        const [admins, actions] = await Promise.all([this.controlPanel.fetchClientAdmins(), this.controlPanel.fetchAdminActions(addDays(snapshotDate, -90))]);
+        await this.adoptionRepo.replaceAdmins(admins, actions);
+        adoption.admins = admins.length;
+      } catch (err) {
+        warnings.push(`Administrator activity not loaded: ${err instanceof Error ? err.message : String(err)}`);
+      }
+      try {
+        const activity = await this.controlPanel.fetchEmployeeActivity(addDays(snapshotDate, -120));
+        await this.adoptionRepo.replaceEmployeeActivity(activity);
+        adoption.activity = activity.length;
+      } catch (err) {
+        warnings.push(`Employee activity not loaded: ${err instanceof Error ? err.message : String(err)}`);
+      }
+      try {
+        const modules = await this.controlPanel.fetchClientModules();
+        await this.adoptionRepo.replaceModules(modules);
+        adoption.modules = modules.length;
+      } catch (err) {
+        warnings.push(`Modules bought not loaded: ${err instanceof Error ? err.message : String(err)}`);
+      }
       for (const w of warnings) this.log.warn(w);
 
-      const counts = { companies: companies.length, accounts: accounts.length, tickets, revenueLines, warnings };
+      const counts = { companies: companies.length, accounts: accounts.length, tickets, revenueLines, adoption, warnings };
       await this.db.query(
         `UPDATE ingestion_run SET status = 'succeeded', counts = $2, finished_at = now() WHERE id = $1`,
         [runId, counts],

@@ -37,11 +37,11 @@ describe('API with Google sign-in and roles', () => {
 
   it('shows a CSM only their own portfolio', async () => {
     const mine = await http().get('/flags').set(as('ngozi.okafor@example.com')).expect(200);
-    expect(mine.body.length).toBe(2);
+    expect(mine.body.length).toBe(3); // Lekki: late payroll, ARR mismatch, tickets past SLA
     expect(new Set(mine.body.map((f: any) => f.csmEmail))).toEqual(new Set(['ngozi.okafor@example.com']));
 
     const all = await http().get('/flags').set(as('director@example.com')).expect(200);
-    expect(all.body.length).toBe(14);
+    expect(all.body.length).toBe(18);
     expect(all.body[0].severity).toBe('urgent'); // most severe first
 
     const other = all.body.find((f: any) => f.csmEmail === 'tunde.bello@example.com');
